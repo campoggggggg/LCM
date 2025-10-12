@@ -96,7 +96,7 @@ def stats_to_df(stats):
 st.sidebar.title("📋 Menu")
 page = st.sidebar.radio(
     "Scelect a section:",
-    ["🏠 Dashboard", "🔍 Search cards", "➕ Cube management", "📊 Distribution", "📜 Rules"]
+    ["🏠 Dashboard", "🔍 Search cards", "➕ Cube management", "📊 Report", "📜 Rules"]
 )
 
 # Mostra conteggio cubo sempre visibile
@@ -167,7 +167,7 @@ if page == "🏠 Dashboard":
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("🎨 Inks distribution")
+            st.subheader("🎨 About inks")
             color_stats = manager.stats_color()
             if color_stats:
                 df_colors = stats_to_df(color_stats)
@@ -228,7 +228,7 @@ if page == "🏠 Dashboard":
                 st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            st.subheader("🃏 Type distribution")
+            st.subheader("🃏 About type")
             if type_stats:
                 df_types = stats_to_df(type_stats)
                 fig = px.bar(df_types, x='Nome', y='Conteggio', 
@@ -303,66 +303,66 @@ if page == "🏠 Dashboard":
             cube_cards.sort(key=lambda x: (x['type'], x['name']))
         
             # CSS per le card
-    st.markdown("""
-        <style>
-        .card-container {
-            position: relative;
-            border-radius: 10px;
-            overflow: hidden;
-            transition: transform 0.2s;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-            margin-bottom: 15px;
-        }
-        .card-container:hover {
-            transform: scale(1.05);
-            box-shadow: 0 4px 15px rgba(255,107,107,0.5);
-            z-index: 10;
-        }
-        .card-img {
-            width: 100%;
-            height: auto;
-            display: block;
-            border-radius: 10px;
-        }
-        .card-name {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 5px;
-            font-size: 0.8em;
-            text-align: center;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        .card-container:hover .card-name {
-            opacity: 1;
-        }
-        /* Riduci il gap tra le colonne */
-        [data-testid="column"] {
-            padding: 0 5px !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    # Crea la griglia
-    cols = st.columns(cards_per_row, gap="small")
-    
-    for idx, card in enumerate(cube_cards):
-        col_idx = idx % cards_per_row
+        st.markdown("""
+            <style>
+            .card-container {
+                position: relative;
+                border-radius: 10px;
+                overflow: hidden;
+                transition: transform 0.2s;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                margin-bottom: 15px;
+            }
+            .card-container:hover {
+                transform: scale(1.05);
+                box-shadow: 0 4px 15px rgba(255,107,107,0.5);
+                z-index: 10;
+            }
+            .card-img {
+                width: 100%;
+                height: auto;
+                display: block;
+                border-radius: 10px;
+            }
+            .card-name {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: rgba(0,0,0,0.8);
+                color: white;
+                padding: 5px;
+                font-size: 0.8em;
+                text-align: center;
+                opacity: 0;
+                transition: opacity 0.2s;
+            }
+            .card-container:hover .card-name {
+                opacity: 1;
+            }
+            /* Riduci il gap tra le colonne */
+            [data-testid="column"] {
+                padding: 0 5px !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
         
-        with cols[col_idx]:
-            Image = card['Image'] if card['Image'] else f"https://via.placeholder.com/300x420?text={card['name']}"
+        # Crea la griglia
+        cols = st.columns(cards_per_row, gap="small")
+        
+        for idx, card in enumerate(cube_cards):
+            col_idx = idx % cards_per_row
             
-            # Mostra la carta
-            st.markdown(f"""
-                <div class="card-container">
-                    <img src="{Image}" class="card-img" alt="{card['name']}">
-                    <div class="card-name">{card['name']}</div>
-                </div>
-            """, unsafe_allow_html=True)
+            with cols[col_idx]:
+                Image = card['Image'] if card['Image'] else f"https://via.placeholder.com/300x420?text={card['name']}"
+                
+                # Mostra la carta
+                st.markdown(f"""
+                    <div class="card-container">
+                        <img src="{Image}" class="card-img" alt="{card['name']}">
+                        <div class="card-name">{card['name']}</div>
+                    </div>
+                """, unsafe_allow_html=True)
 
     else:
         st.warning("No cards in cube yet!")
@@ -487,37 +487,53 @@ elif page == "➕ Cube management":
     with tab1:
         st.subheader("Add cards to cube")
         
-        search_add = st.text_input("🔎 Cerca carta da aggiungere:", 
-                                   key="add_search")
+        search_add = st.text_input("Search", 
+                                    placeholder="Es: Elsa, Mickey, Maleficent...",
+                                    label_visibility="collapsed",
+                                    key="add_search")
         
         if search_add:
             results = manager.search_cards(search_add, in_cube=False)
             
             if results:
                 for idx, card in enumerate(results):
-                    bg_color = "#f0f0f0" if idx % 2 == 0 else "transparent"
-                    st.markdown(f"<div style='background-color: {bg_color}; padding: 10px; border-radius: 5px;'>", unsafe_allow_html=True)
-                    col1, col2, col3 = st.columns([3, 1, 1])
+                    # Alterna i colori: grigio chiaro e bianco
+                    bg_color = "#CBCBCB"
                     
-                    with col1:
-                        st.write(f"**{card[1]}** - {card[6]} | {card[7]} | Costo: {card[8]}")
-                    
-                    with col2:
-                        if card[26] == 1:
-                            st.success("✅ In cube")
-                        else:
-                            st.info("⚪ Not in cube")
-                    
-                    with col3:
-                        if card[26] == 0:
-                            if st.button("➕ Add", key=f"add_{card[0]}"):
-                                if manager.add_cube(card[0]):
-                                    st.success(f"✅ {card[1]} Done!")
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Error")
-                    st.markdown("</div>", unsafe_allow_html=True)
-    
+                    # Wrapper esterno per la riga
+                    with st.container():
+                        st.markdown(
+                            f"""
+                            <div style="
+                                background-color: {bg_color};
+                                padding: 1px 1px;
+                                border-radius: 3px;
+                                margin-bottom: 1px;
+                                border: 0px solid #e0e0e0;
+                            ">
+                            """,
+                            unsafe_allow_html=True
+                        )
+                        
+                        col1, col2, col3 = st.columns([3, 1, 1])
+                        with col1:
+                            st.markdown(f"**{card[1]}** - {card[6]} | {card[7]} | Costo: {card[8]}")
+                        with col2:
+                            if card[26] == 1:
+                                st.markdown("<div style='text-align:center; color:green;'>✅ In cube</div>", unsafe_allow_html=True)
+                            else:
+                                st.markdown("<div style='text-align:center; color:#888;'>⚪ Not in cube</div>", unsafe_allow_html=True)
+                        with col3:
+                            if card[26] == 0:
+                                if st.button("➕ Add", key=f"add_{card[0]}"):
+                                    if manager.add_cube(card[0]):
+                                        st.success(f"✅ {card[1]} Added!")
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Error")
+
+                        st.markdown("</div>", unsafe_allow_html=True)
+                
     with tab2:
         st.subheader("Remove cards from cube")
         
@@ -543,54 +559,11 @@ elif page == "➕ Cube management":
                                 st.error("❌ Error")
             else:
                 st.info("No cards found in cube")
-
-    st.markdown("---")
-    st.markdown("##")  # Spazio extra
-    st.markdown("---")
-
-    st.subheader("📊 Report")
-    if st.button("🚀 Generate a complete Report", type="primary"):
-        with st.spinner("Loading"):
-            # Tabs per organizzare tutte le stats
-            tabs = st.tabs(["🎨 Inks", "🃏 Type", "💎 Cost", "🏷️ Classification", "🔑 Keywords"])
-            
-            with tabs[0]:
-                stats = manager.stats_color()
-                if stats:
-                    df = stats_to_df(stats)
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-                    fig = px.pie(df, values='Count', names='Name')
-                    st.plotly_chart(fig, use_container_width=True)
-            
-            with tabs[1]:
-                stats = manager.stats_type()
-                if stats:
-                    df = stats_to_df(stats)
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-            
-            with tabs[2]:
-                stats = manager.stats_cost()
-                if stats:
-                    df = stats_to_df(stats)
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-            
-            with tabs[3]:
-                stats = manager.stats_classification()
-                if stats:
-                    df = stats_to_df(stats)
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-            
-            with tabs[4]:
-                stats = manager.stats_keyword()
-                if stats:
-                    df = stats_to_df(stats)
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-
 # ============================================================================
 # PAGINA: STATISTICHE
 # ============================================================================
-elif page == "📊 Distribution":
-    st.header("📊 Cube distributions")
+elif page == "📊 Report":
+    st.header("📊 Cube statistics")
     
     if cube_count == 0:
         st.warning("⚠️ Cube is empty!")
@@ -714,6 +687,7 @@ elif page == "📊 Distribution":
         
         elif stat_choice == "🏷️ Classification":
             stats = manager.stats_classification()
+            
             if stats:
                 df = stats_to_df(stats)
                 df = df.sort_values('Conteggio', ascending=False)
@@ -737,7 +711,8 @@ elif page == "📊 Distribution":
                 fig.update_traces(textposition='outside')
                 st.plotly_chart(fig, use_container_width=True)
                 st.dataframe(df, hide_index=True)
-
+            else:
+                st.warning("⚠️ No keywords found in cube")
 # ============================================================================
 # PAGINA: REGOLE
 # ============================================================================
@@ -769,7 +744,7 @@ elif page == "📜 Rules":
 
     #### 1. Dashboard
     - View an overview of your cube including total cards, types, inks, and inkable cards.
-    - Visualize distributions with pie charts and bar graphs.
+    - Visualize statistics with pie charts and bar graphs.
 
     #### 2. Search Cards by Name
     - Search for specific cards by entering their name.
@@ -779,15 +754,14 @@ elif page == "📜 Rules":
     #### 3. Cube Management
     - Add cards to your cube by searching for them and clicking the "Add" button.
     - Remove cards from your cube by searching for them and clicking the "Remove" button.
-    - Generate a comprehensive report of your cube's statistics including inks, types, costs, classifications, and keywords.
 
-    #### 4. Distribution
+    #### 4. Report
     - Analyze various statistics of your cube such as inks, types, costs, inkable status, strength, willpower, lore, classifications, and keywords.
     - Visualize data with interactive charts.
 
 
 
-    Enjoy managing your Lorcana card cube!
+    Enjoy and happy cubing! "No no no no no no kid. Giving up is for rookies" - 🎬 Hercules
     """)
     
     
