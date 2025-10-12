@@ -1,0 +1,492 @@
+#cube manager: funzioni cerca, aggiungi, rimuovi, 
+
+import sqlite3
+
+
+class CubeManager:
+    def __init__(self, db_path='lorcana_cards.db'):
+        self.db_path = db_path #salva il percorso
+        self.conn = None #connette a None
+        self.cursor = None #cursor a None
+    
+    def connect(self): #connette al db
+        try:
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.conn.row_factory = sqlite3.Row #permette di accedere alle colonne per nome
+            print("✅ Connessione al database avvenuta con successo")
+            return True
+        except sqlite3.Error as e:
+            print(f"❌ Errore di connessione al database: {e}") 
+            return False
+        
+    def close(self): #chiude la connessione
+        if self.conn:
+            self.conn.close()
+            print("✅ Connessione al database chiusa")
+
+    #funzione search_cards()
+
+    def search_cards(self, query, in_cube=False):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return []
+        
+        try:
+            cursor = self.conn.cursor()
+            search_pattern = f"%{query.lower()}%"
+        
+            if in_cube:
+                sql = "SELECT * FROM cards WHERE LOWER(name) LIKE ? AND in_cube = 1"
+            else:
+                sql = "SELECT * FROM cards WHERE LOWER(name) LIKE ?"
+        
+            cursor.execute(sql, (search_pattern,))  # ✅ Tupla, non lista
+            results = cursor.fetchall()
+            print(f"✅ Trovate {len(results)} carte")
+            return results
+        
+        except Exception as e:
+            print(f"❌ Errore in search_cards: {e}")
+            return []
+        
+    #search_by_effect()
+    def search_by_effect(self, text, in_cube=False):
+        if not self.conn or not self.cursor:
+            print("❌ search_by_effect: Connessione al database non disponibile")
+            return []
+        
+        query = """
+        SELECT * FROM cards 
+        WHERE (body_text LIKE ? OR effect_text LIKE ?)
+        """
+        
+        if in_cube:
+            query += " AND in_cube = 1"
+        
+        search_pattern = f"%{text}%"
+        self.cursor.execute(query, (search_pattern, search_pattern))
+        return self.cursor.fetchall()
+
+    #funzione add_cube()
+    def add_cube(self, card_id):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return False
+        cursor = self.conn.cursor()
+        # Controlla se la carta esiste
+        cursor.execute("SELECT * FROM cards WHERE unique_id = ?", (card_id,))
+        card = cursor.fetchone()
+        if not card:
+            print(f"❌ Carta con ID {card_id} non trovata")
+            return False
+        # Controlla se la carta è già nel cubo
+        if card[26] == 1:  # assuming 'in_cube' is the 6th column (index 5)
+            print(f"❌ Carta con ID {card_id} è già nel cubo")
+            return False
+        # Aggiungi la carta al cubo
+        cursor.execute("UPDATE cards SET in_cube = 1 WHERE unique_id = ?", (card_id,))
+        self.conn.commit()
+        print(f"✅ Carta con ID {card_id} aggiunta al cubo")
+        return True
+
+    #funzione remove_cube()
+    def remove_cube(self, card_id):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return False
+        cursor = self.conn.cursor()
+        # Controlla se la carta esiste
+        cursor.execute("SELECT * FROM cards WHERE unique_id = ?", (card_id,))
+        card = cursor.fetchone()
+        if not card:
+            print(f"❌ Carta con ID {card_id} non trovata")
+            return False
+        # Controlla se la carta è nel cubo
+        if card[26] == 0:  # assuming 'in_cube' is the 6th column (index 5)
+            print(f"❌ Carta con ID {card_id} non è nel cubo")
+            return False
+        # Rimuovi la carta dal cubo
+        cursor.execute("UPDATE cards SET in_cube = 0 WHERE unique_id = ?", (card_id,))
+        self.conn.commit()
+        print(f"✅ Carta con ID {card_id} rimossa dal cubo")
+        return True
+
+    #funzione get_cube_count()
+    def get_cube_count(self):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return 0
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM cards WHERE in_cube = 1")
+            result = cursor.fetchone()
+            return result[0] if result else 0
+        
+        except Exception as e:
+            print(f"❌ Errore nel conteggio delle carte nel cubo: {e}")
+            return 0
+
+       #funzione get_cube_cards()
+    def get_cube_cards(self):
+        if not self.conn:
+            print("❌ get_cube_cardsConnessione al database non disponibile")
+            return []
+        cursor = self.conn.cursor()
+        
+        query = """
+        SELECT unique_id, name, type, color, cost, Image
+        FROM cards 
+        WHERE in_cube = 1 
+        ORDER BY name
+        """
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        
+        # Converti in lista di dizionari per facilità d'uso
+        cards = []
+        for row in rows:
+            cards.append({
+                'unique_id': row[0],
+                'name': row[1],
+                'type': row[2],
+                'color': row[3],
+                'cost': row[4],
+                'Image': row[5]
+            })
+        return cards
+
+    #funzione get_type_count()
+    def get_type_count(self, type):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return 0
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM cards WHERE in_cube = 1 AND LOWER(type) = LOWER(?)", (type,))
+        count = cursor.fetchone()[0]
+        return count
+
+    #funzione stats_color() [Amber, Amethyst, Emerald, Ruby, Sapphire, Steel]
+    def stats_color(self):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return {}
+        cursor = self.conn.cursor()
+        total = self.get_cube_count()
+        if total == 0:
+            print("❌ Nessuna carta nel cubo per calcolare le statistiche")
+            return {}
+        cursor.execute("SELECT color, COUNT(*) AS count FROM cards WHERE in_cube = 1 GROUP BY color")
+        stats = {}
+        for row in cursor.fetchall():
+            color = row['color'] or 'Nessuno'
+            count = row['count']
+            percentage = (count/total)*100
+            stats[color] = {'count': count, 'percentage': percentage}
+            print(f"🎨 {color:<15}: {count:>3} | {percentage:>5.2f}%")
+        return stats
+
+    #funzione stats_type() [character, action, song or location]
+    def stats_type(self):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return {}
+        cursor = self.conn.cursor()
+        total = self.get_cube_count()
+        if total == 0:
+            print("❌ Nessuna carta nel cubo per calcolare le statistiche")
+            return {}
+        cursor.execute("SELECT type, COUNT(*) AS count FROM cards WHERE in_cube = 1 GROUP BY type")
+        stats = {}
+        for row in cursor.fetchall():
+            type = row['type'] or 'Nessuno'
+            count = row['count']
+            percentage = (count/total)*100
+            stats[type] = {'count': count, 'percentage': percentage}
+            print(f"🃏 {type:<15}: {count:>3} | {percentage:>5.2f}%")
+        return stats
+
+    #funzione cost_stats() 
+    def stats_cost(self):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return {}
+        cursor = self.conn.cursor()
+        total = self.get_cube_count()
+        if total == 0:
+            print("❌ Nessuna carta nel cubo per calcolare le statistiche")
+            return {}
+        cursor.execute("SELECT cost, COUNT(*) AS count FROM cards WHERE in_cube = 1 GROUP BY cost ORDER BY cost")
+        stats = {}
+        for row in cursor.fetchall():
+            cost = row['cost'] or 'Nessuno'
+            count = row['count']
+            percentage = (count/total)*100
+            stats[cost] = {'count': count, 'percentage': percentage}
+            print(f"💰 {cost:<5}: {count:>3} | {percentage:5.2f}%")
+        return stats
+
+    #funzione inkable_stats()
+    def stats_inkable(self):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return {}
+        cursor = self.conn.cursor()
+        total = self.get_cube_count()
+        if total == 0:
+            print("❌ Nessuna carta nel cubo per calcolare le statistiche")
+            return {}
+        cursor.execute("""SELECT 
+                    SUM(CASE WHEN inkable = 1 THEN 1 ELSE 0 END) AS inkable_yes,
+                    SUM(CASE WHEN inkable = 0 THEN 1 ELSE 0 END) AS inkable_no
+                    FROM cards WHERE in_cube = 1
+                    """)
+        row = cursor.fetchone()
+        stats = {}
+        inkable_yes = row['inkable_yes'] or 0
+        inkable_no = row['inkable_no'] or 0
+        print(f"🖋️ Inkable: {inkable_yes} | {inkable_yes/total*100:5.2f}%")
+        print(f"❌ Non Inkable: {inkable_no} | {inkable_no/total*100:5.2f}%")
+        stats = {
+            'inkable_yes': {'count': inkable_yes, 'percentage': (inkable_yes/total)*100},
+            'inkable_no': {'count': inkable_no, 'percentage': (inkable_no/total)*100}
+        }
+        return stats
+
+    # funzione stats_strength()
+    def stats_strength(self):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return {}
+        cursor = self.conn.cursor()
+        tot_char = self.get_type_count('character')
+        cursor.execute("""SELECT strength, COUNT(*) AS count FROM cards
+                        WHERE in_cube = 1 
+                    GROUP BY strength 
+                    ORDER BY strength
+                    """)
+        stats = {}
+        for row in cursor.fetchall():
+            strength = row['strength'] or 'Nessuno'
+            count = row['count']
+            percentage = (count/tot_char)*100 
+            print(f"⚔️ {strength:<5}: {count:>3} | {percentage:>5.2f}%")
+            stats[strength] = {'count': count, 'percentage': percentage}
+        return stats    
+
+    #stats_willpower()
+    def stats_willpower(self):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return {}
+        cursor = self.conn.cursor()
+        tot_char = self.get_type_count('character')
+        cursor.execute("""SELECT willpower, COUNT(*) AS count FROM cards
+                        WHERE in_cube = 1 
+                    GROUP BY willpower 
+                    ORDER BY willpower
+                    """)
+        stats = {}
+        for row in cursor.fetchall():
+            willpower = row['willpower'] or 'Nessuno'
+            count = row['count']
+            percentage = (count/tot_char)*100
+            print(f"🛡️ {willpower:<5}: {count:>3} | {percentage:>5.2f}")
+            stats[willpower] = {'count': count, 'percentage': percentage}
+        return stats
+
+    #funzione lore()
+    def stats_lore(self):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return {}
+        cursor = self.conn.cursor()
+        tot_char = self.get_type_count('character')
+
+        print(f"\n🏷️  CLASSIFICAZIONI ({tot_char} Character):")
+
+        cursor.execute("""SELECT lore, COUNT(*) AS count FROM cards
+                        WHERE in_cube = 1 
+                    GROUP BY lore 
+                    ORDER BY lore
+                    """)
+        stats = {}
+        for row in cursor.fetchall():
+            lore = row['lore'] or 'Nessuno'
+            count = row['count']
+            percentage = (count/tot_char)*100
+            print(f"📜 {lore:<5}: {count:>3} | {percentage:>5.2f}")
+            stats[lore] = count
+        return stats
+
+    #fuznione stats_classification_character() [Hero, Villain, Ally, Floodborn, Dreamborn, etc...]
+    def stats_classification(self):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return {}
+        cursor = self.conn.cursor()
+        tot_char = self.get_type_count('character')
+        cursor.execute("SELECT classifications, COUNT(*) AS count FROM cards WHERE in_cube = 1 AND LOWER(type) = 'character'")
+        
+        import json
+        stats = {}
+
+        for row in cursor.fetchall():
+            try:
+                class_list = json.loads(row['classifications'])
+
+                for classifications in class_list:
+                    if classifications in stats:
+                        stats[classifications]['count'] += 1 
+                    else:
+                        stats[classifications] = {'count': 1}
+            except:
+                pass 
+                
+        for classifications in sorted(stats.keys(), key=lambda x: stats[x]['count'], reverse=True):
+            count = stats[classifications]['count']
+            percentage = (count/tot_char)*100
+            stats[classifications]['percentage'] = percentage
+            bar = "█" * int(percentage / 3)
+
+            print(f"🔖 {classifications:<15}: {count:>3} | {percentage:>5.2f}% {bar}")
+        return stats
+
+    #funzione stats_keyword() [Challenger, Evasive, Rush, etc...]
+    def stats_keyword(self):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return {}
+        cursor = self.conn.cursor()
+        tot_char = self.get_type_count('character')
+
+        print(f"\n🔑 PAROLE CHIAVE ({tot_char} Character):")
+
+        keywords = [
+                'Challenger', 'Evasive', 'Rush', 'Ward', 'Shift', 
+                'Bodyguard', 'Reckless', 'Singer', 'Support', 'Resist'
+        ]
+        
+        stats = {}
+
+        for keyword in keywords:
+            cursor.execute("""SELECT COUNT(*) AS count FROM cards
+                            WHERE in_cube = 1 AND LOWER(type) = 'character' 
+                            AND LOWER(Abilities) LIKE ?
+                        """, (f"%{keyword.lower()}%",))
+            
+            count = cursor.fetchone()['count']
+            if count>0:
+                percentage = (count/tot_char)*100
+                stats[keyword] = {'count': count, 'percentage': percentage}
+
+            for keyword in sorted(stats.keys(), key=lambda x: stats[x]['count'], reverse=True):
+                count = stats[keyword]['count']
+                percentage = stats[keyword]['percentage']
+                bar = "█" * int(percentage / 3)
+                print(f"🔑 {keyword:<15}: {count:>3} | {percentage:>5.2f}% {bar}")
+
+            if not stats:
+                print("❌ Nessuna parola chiave trovata nel cubo")
+
+            return stats    
+        
+    #funzione stats_text_quotes() [cerca specifiche parole nell'effetto delle carte]
+    def stats_text_quotes(self, words):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return {}
+        
+        search_text = input("🔍 Inserisci le parole da cercare: ")
+
+        if not search_text.strip():
+            print("❌ Nessuna parola inserita")
+            return {}
+        
+        cursor = self.conn.cursor()
+
+        cursor.execute("""SELECT COUNT(*) AS count FROM cards
+                        WHERE in_cube = 1 
+                        AND LOWER(body_text) LIKE ?
+                    """, (f"%{search_text.lower()}%",))
+        results = cursor.fetchall()
+        if results:
+            print(f"\n📜 Carte trovate: {len(results)}")
+
+            for i, card in enumerate(results, 1):
+                print(f"{i}. {card['name']}")
+                print(f"   {card['type']} | {card['color']} | Costo: {card['cost']}")
+                
+                body = card['body_text'] or "Nessun testo"
+
+                if len(body) > 100:
+                    body = body[:100] + "..."
+                print(f"   Testo: {body}\n")
+                print()
+        else:
+            print("❌ Nessuna carta trovata con quel testo")
+        return results
+
+    #funzione stats_all() [esegue tutte le statistiche]
+    def stats_all(self):
+        if not self.conn:
+            print("❌ Connessione al database non disponibile")
+            return {}
+        total = self.get_cube_count()
+        if total == 0:
+            print("❌ Nessuna carta nel cubo per calcolare le statistiche")
+            return {}  
+
+        print("\n" + "=" * 30 + " ANALISI CUBO " + "=" * 30)
+        self.stats_color()
+        self.stats_type()
+        self.stats_cost()
+        self.stats_inkable()
+        self.strength()
+        self.willpower()
+        self.lore()
+        self.stats_classification()
+        self.stats_keyword()
+        print("=" * 70 + "\n")
+
+    #menù interattivo per scegliere quale funzione eseguire
+    def menu(self):
+        while True:
+            print("\n" + "=" * 30 + " GESTIONE CUBO " + "=" * 30)
+            print("\n1.  🎨 Distribuzione per colore")
+            print("2.  🃏 Distribuzione per tipo")
+            print("3.  💎 Distribuzione per costo")
+            print("4.  ⚔️ Distribuzione per forza")
+            print("5.  🛡️ Distribuzione per volontà")
+            print("6.  🏷️ Classificazioni")
+            print("7.  🔑 Keywords")
+            print("8.  📝 Cerca nel testo")
+            print("9.  🖋️ Inkable/Non-Inkable")
+            print("10. 📊 TUTTE LE STATISTICHE")
+            print("0.  ← Indietro")
+            choice = input("Scegli un'opzione (1-10) o 0: ")
+            
+            if choice == '1':
+                self.stats_color()
+            elif choice == '2':
+                self.stats_type()
+            elif choice == '3':
+                self.stats_cost()
+            elif choice == '4':
+                self.strength()
+            elif choice == '5':
+                self.willpower()
+            elif choice == '6':
+                self.stats_classification()
+            elif choice == '7':
+                self.stats_keyword()
+            elif choice == '8':
+                self.stats_text_quotes()
+            elif choice == '9':
+                self.stats_inkable()
+            elif choice == '10':
+                self.stats_all()
+            elif choice == '0':
+                break
+            else:
+                print("❌ Scelta non valida. Riprova.")
+
