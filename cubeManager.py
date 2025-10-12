@@ -49,23 +49,33 @@ class CubeManager:
             print(f"❌ Errore in search_cards: {e}")
             return []
         
-    #search_by_effect()
+    #function search_by_effect()
     def search_by_effect(self, text, in_cube=False):
-        if not self.conn or not self.cursor:
+        if not self.conn:
             print("❌ search_by_effect: Connessione al database non disponibile")
             return []
         
+        cursor = self.conn.cursor()
+
         query = """
         SELECT * FROM cards 
-        WHERE (body_text LIKE ? OR effect_text LIKE ?)
+        WHERE (body_text LIKE ? OR abilities LIKE ?)
         """
         
         if in_cube:
             query += " AND in_cube = 1"
         
         search_pattern = f"%{text}%"
-        self.cursor.execute(query, (search_pattern, search_pattern))
-        return self.cursor.fetchall()
+
+        print(f"🔍 Query: {query}")  # DEBUG
+        print(f"🔍 Pattern: {search_pattern}")  # DEBUG
+        print(f"🔍 In cube: {in_cube}")  # DEBUG
+
+        cursor.execute(query, (search_pattern, search_pattern))
+        results = cursor.fetchall()
+    
+        print(f"✅ Trovate {len(results)} carte con l'effetto '{text}'")
+        return results
 
     #funzione add_cube()
     def add_cube(self, card_id):
@@ -305,13 +315,17 @@ class CubeManager:
         print(f"\n🏷️  CLASSIFICAZIONI ({tot_char} Character):")
 
         cursor.execute("""SELECT lore, COUNT(*) AS count FROM cards
-                        WHERE in_cube = 1 
+                        WHERE in_cube = 1 AND type = 'Character' OR 'Location'
                     GROUP BY lore 
                     ORDER BY lore
                     """)
         stats = {}
         for row in cursor.fetchall():
-            lore = row['lore'] or 'Nessuno'
+            lore = row['lore']
+
+            if lore is None:
+                continue
+            
             count = row['count']
             percentage = (count/tot_char)*100
             print(f"📜 {lore:<5}: {count:>3} | {percentage:>5.2f}")
@@ -319,45 +333,109 @@ class CubeManager:
         return stats
 
     #fuznione stats_classification_character() [Hero, Villain, Ally, Floodborn, Dreamborn, etc...]
+
     def stats_classification(self):
         if not self.conn:
             print("❌ Connessione al database non disponibile")
             return {}
+        
         cursor = self.conn.cursor()
         tot_char = self.get_type_count('character')
-        cursor.execute("SELECT classifications, COUNT(*) AS count FROM cards WHERE in_cube = 1 AND LOWER(type) = 'character'")
+
+        if tot_char == 0:
+            print("❌ Nessun Character nel cubo per calcolare le statistiche")
+            return {}
+        
+        cursor.execute("SELECT classifications FROM cards WHERE in_cube = 1 AND LOWER(type) = 'character'")
         
         import json
         stats = {}
+        Class_list = ['Alien', 'Ally', 'Broom', 'Captain', 'Deity', 'Detective', 'Dragon', 'Dreamborn', 'Entangled',
+                    'Fairy', 'Floodborn', 'Hero', 'Hyena', 'Inventor', 'King', 'Knight', 'Madrigal', 'Mentor',
+                        'Musketeer', 'Pirate', 'Prince', 'Princess', 'Puppy', 'Queen', 'Racer', 'Seven Dwarfs',
+                        'Song', 'Sorcerer', 'Storyborn', 'Tigger', 'Titan', 'Villain']
+        
+        # Inizializza contatori a zero
+        for cls in Class_list:
+            stats[cls] = {'count': 0}
 
+        # Loop per contare le classificazioni
         for row in cursor.fetchall():
             try:
-                class_list = json.loads(row['classifications'])
+                classifications_str = row['classifications']
 
-                for classifications in class_list:
-                    if classifications in stats:
-                        stats[classifications]['count'] += 1 
-                    else:
-                        stats[classifications] = {'count': 1}
-            except:
-                pass 
+                if not classifications_str:
+                    continue
                 
-        for classifications in sorted(stats.keys(), key=lambda x: stats[x]['count'], reverse=True):
-            count = stats[classifications]['count']
+                # ✅ CORREZIONE CRITICA: Gestisci stringa separata da virgole
+                if isinstance(classifications_str, str):
+                    # Le classificazioni sono salvate come "Storyborn, Ally" non come JSON
+                    class_list = [c.strip().strip('"').strip("'") for c in classifications_str.split(',')]
+                elif isinstance(classifications_str, list):
+                    # Se è già una lista, usala direttamente
+                    class_list = classifications_str
+                else:
+                    continue
+
+                # ✅ DEBUG: Stampa per vedere cosa contiene
+                #print(f"🔍 DEBUG - class_list type: {type(class_list)}, content: {class_list}")
+
+                # Ora itera sulla lista (non sulle lettere!)
+                for classification in class_list:
+                    # Pulisci da spazi, virgolette singole e doppie
+                    classification = str(classification).strip().strip('"').strip("'")
+                    
+                    # ✅ DEBUG: Stampa ogni classificazione processata
+                    #print(f"🔍 Processing: '{classification}'")
+                    
+                    if classification in Class_list:
+                        stats[classification]['count'] += 1
+                        #print(f"✅ Trovata in lista: {classification}, count ora: {stats[classification]['count']}")
+                    else:
+                        if classification:  # Solo se non è vuoto
+                            if classification not in stats:
+                                stats[classification] = {'count': 1}
+                            else:
+                                stats[classification]['count'] += 1
+                            print(f"⚠️ Nuova classificazione: {classification}")
+            
+            except Exception as e:
+                print(f"❌ Errore nel parsing delle classificazioni: {e}")
+                pass
+        
+        # Rimuovi classificazioni con count = 0
+        stats = {k: v for k, v in stats.items() if v['count'] > 0}
+
+        if not stats:
+            print("❌ Nessuna classificazione trovata nel cubo")
+            return {}
+
+        # Calcola percentuali e stampa
+        for classification in sorted(stats.keys(), key=lambda x: stats[x]['count'], reverse=True):
+            count = stats[classification]['count']
             percentage = (count/tot_char)*100
-            stats[classifications]['percentage'] = percentage
+            stats[classification]['percentage'] = percentage
             bar = "█" * int(percentage / 3)
 
-            print(f"🔖 {classifications:<15}: {count:>3} | {percentage:>5.2f}% {bar}")
+            print(f"🔖 {classification:<15}: {count:>3} | {percentage:>5.2f}% {bar}")
+        
         return stats
+
+
+
 
     #funzione stats_keyword() [Challenger, Evasive, Rush, etc...]
     def stats_keyword(self):
         if not self.conn:
             print("❌ Connessione al database non disponibile")
             return {}
+        
         cursor = self.conn.cursor()
         tot_char = self.get_type_count('character')
+
+        if tot_char == 0:
+            print("❌ Nessun Character nel cubo")
+            return {}
 
         print(f"\n🔑 PAROLE CHIAVE ({tot_char} Character):")
 
@@ -368,6 +446,7 @@ class CubeManager:
         
         stats = {}
 
+        # ✅ CORREZIONE: Loop per contare le keyword
         for keyword in keywords:
             cursor.execute("""SELECT COUNT(*) AS count FROM cards
                             WHERE in_cube = 1 AND LOWER(type) = 'character' 
@@ -375,21 +454,22 @@ class CubeManager:
                         """, (f"%{keyword.lower()}%",))
             
             count = cursor.fetchone()['count']
-            if count>0:
+            if count > 0:
                 percentage = (count/tot_char)*100
                 stats[keyword] = {'count': count, 'percentage': percentage}
 
-            for keyword in sorted(stats.keys(), key=lambda x: stats[x]['count'], reverse=True):
-                count = stats[keyword]['count']
-                percentage = stats[keyword]['percentage']
-                bar = "█" * int(percentage / 3)
-                print(f"🔑 {keyword:<15}: {count:>3} | {percentage:>5.2f}% {bar}")
+        # ✅ CORREZIONE: Questo loop deve essere FUORI dal loop precedente
+        for keyword in sorted(stats.keys(), key=lambda x: stats[x]['count'], reverse=True):
+            count = stats[keyword]['count']
+            percentage = stats[keyword]['percentage']
+            bar = "█" * int(percentage / 3)
+            print(f"🔑 {keyword:<15}: {count:>3} | {percentage:>5.2f}% {bar}")
 
-            if not stats:
-                print("❌ Nessuna parola chiave trovata nel cubo")
-
-            return stats    
-        
+        if not stats:
+            print("❌ Nessuna parola chiave trovata nel cubo")
+            
+        return stats
+            
     #funzione stats_text_quotes() [cerca specifiche parole nell'effetto delle carte]
     def stats_text_quotes(self, words):
         if not self.conn:
