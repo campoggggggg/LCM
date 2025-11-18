@@ -570,3 +570,151 @@ class CubeManager:
             else:
                 print("❌ Scelta non valida. Riprova.")
 
+def setup_tournaments_table(self):
+    """Crea le tabelle per tracciare i tornei"""
+    if not self.conn:
+        return False
+    
+    cursor = self.conn.cursor()
+    
+    # Tabella tornei
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tournaments (
+            tournament_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            winner_name TEXT NOT NULL,
+            colors TEXT NOT NULL,
+            tournament_date DATE NOT NULL,
+            notes TEXT
+        )
+    ''')
+    
+    # Tabella mazzi vincitori (molti-a-molti con cards)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tournament_decks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tournament_id INTEGER NOT NULL,
+            card_unique_id TEXT NOT NULL,
+            FOREIGN KEY (tournament_id) REFERENCES tournaments(tournament_id),
+            FOREIGN KEY (card_unique_id) REFERENCES cards(unique_id)
+        )
+    ''')
+    
+    self.conn.commit()
+    print("✅ Tabelle tornei create")
+    return True
+
+def add_tournament(self, winner_name, colors, date, deck_cards):
+    """Registra un nuovo torneo"""
+    if not self.conn:
+        return False
+    
+    cursor = self.conn.cursor()
+    
+    try:
+        # Inserisci torneo
+        cursor.execute(
+            "INSERT INTO tournaments (winner_name, colors, tournament_date) VALUES (?, ?, ?)",
+            (winner_name, colors, date)
+        )
+        tournament_id = cursor.lastrowid
+        
+        # Inserisci carte del mazzo
+        for card_id in deck_cards:
+            cursor.execute(
+                "INSERT INTO tournament_decks (tournament_id, card_unique_id) VALUES (?, ?)",
+                (tournament_id, card_id)
+            )
+        
+        self.conn.commit()
+        print(f"✅ Torneo registrato: {winner_name} - {colors}")
+        return True
+    
+    except Exception as e:
+        print(f"❌ Errore registrazione torneo: {e}")
+        self.conn.rollback()
+        return False
+
+def get_all_tournaments(self):
+    """Recupera tutti i tornei"""
+    if not self.conn:
+        return []
+    
+    cursor = self.conn.cursor()
+    cursor.execute("""
+        SELECT tournament_id, winner_name, colors, tournament_date 
+        FROM tournaments 
+        ORDER BY tournament_date DESC
+    """)
+    
+    return cursor.fetchall()
+
+def get_tournament_deck(self, tournament_id):
+    """Recupera il mazzo di un torneo specifico"""
+    if not self.conn:
+        return []
+    
+    cursor = self.conn.cursor()
+    cursor.execute("""
+        SELECT c.unique_id, c.name, c.type, c.color, c.cost, c.Image
+        FROM cards c
+        JOIN tournament_decks td ON c.unique_id = td.card_unique_id
+        WHERE td.tournament_id = ?
+    """, (tournament_id,))
+    
+    return cursor.fetchall()
+
+def get_card_winrate(self):
+    """Statistiche carte con più vittorie"""
+    if not self.conn:
+        return []
+    
+    cursor = self.conn.cursor()
+    cursor.execute("""
+        SELECT 
+            c.name,
+            c.type,
+            c.color,
+            COUNT(td.tournament_id) as wins
+        FROM cards c
+        JOIN tournament_decks td ON c.unique_id = td.card_unique_id
+        GROUP BY c.unique_id
+        ORDER BY wins DESC
+        LIMIT 50
+    """)
+    
+    return cursor.fetchall()
+
+def get_color_winrate(self):
+    """Statistiche colori con più vittorie"""
+    if not self.conn:
+        return []
+    
+    cursor = self.conn.cursor()
+    cursor.execute("""
+        SELECT 
+            colors,
+            COUNT(*) as wins
+        FROM tournaments
+        GROUP BY colors
+        ORDER BY wins DESC
+    """)
+    
+    return cursor.fetchall()
+
+def get_winner_stats(self):
+    """Statistiche vincitori"""
+    if not self.conn:
+        return []
+    
+    cursor = self.conn.cursor()
+    cursor.execute("""
+        SELECT 
+            winner_name,
+            COUNT(*) as wins,
+            GROUP_CONCAT(DISTINCT colors) as colors_used
+        FROM tournaments
+        GROUP BY winner_name
+        ORDER BY wins DESC
+    """)
+    
+    return cursor.fetchall()
