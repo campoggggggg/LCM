@@ -1,6 +1,9 @@
 #cubo lorcana app su streamlit
 
 import streamlit as st
+import re
+import streamlit.components.v1 as components
+import json 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -8,11 +11,11 @@ from cubeManager import CubeManager
 
 #conf. pagina
 st.set_page_config(page_title="Lorcana Cube Manager",
-                   page_icon="🧊",
+                   page_icon="🏰",
                    layout="wide", 
                    initial_sidebar_state="expanded"
 )
-st.title("🧊 Lorcana Cube Manager")
+st.title("🏰 Lorcana Cube Manager")
 
 # CSS personalizzato
 st.markdown("""
@@ -95,8 +98,8 @@ def stats_to_df(stats):
 # SIDEBAR
 st.sidebar.title("📋 Menu")
 page = st.sidebar.radio(
-    "Scelect a section:",
-    ["🏠 Dashboard", "🔍 Search cards", "➕ Cube management", "📊 Report", "📜 Rules"]
+    "Select a section:",
+    ["🏠 Dashboard", "➕ Cube management", "📊 Other stats", "🏆 Report a tournament", "📈 Tournament stats", "📜 Rules"]
 )
 
 # Mostra conteggio cubo sempre visibile
@@ -114,7 +117,7 @@ if page == "🏠 Dashboard":
         st.warning("⚠️ Cube is empty! Add some cards to see stats.")
     else:
         # Metriche principali
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             st.metric("🎴 Total cards", cube_count)
@@ -132,9 +135,9 @@ if page == "🏠 Dashboard":
     
                 st.markdown(f"""
     <div style='text-align: left;'>
-        <p style='color: black; font-size: 14px; margin: 0;'>🖋️ Inkable</p>
+        <p style='color: ; font-size: 14px; margin: 0;'>🖋️ Inkable</p>
         <p style='font-size: 32px; font-weight: 600; margin: 0;'>
-            {inkable_count} <span style='font-size: 20px; color: gray;'>({inkable_perc:.1f}%)</span>
+            {inkable_count} <span style='font-size: 20px; color: gray;'>{inkable_perc:.1f}%</span>
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -149,25 +152,21 @@ if page == "🏠 Dashboard":
     
                 st.markdown(f"""
     <div style='text-align: left;'>
-        <p style='color: black; font-size: 14px; margin: 0;'>❌🖋️ Uninkable</p>
+        <p style='color: ; font-size: 14px; margin: 0;'>❌🖋️ Uninkable</p>
         <p style='font-size: 32px; font-weight: 600; margin: 0;'>
-            {uninkable_count} <span style='font-size: 20px; color: gray;'>({uninkable_perc:.1f}%)</span>
+            {uninkable_count} <span style='font-size: 20px; color: gray;'>{uninkable_perc:.1f}%</span>
         </p>
     </div>
     """, unsafe_allow_html=True)
                 
             else:
                 st.metric("❌🖋️ Uninkable", "0 (0.0%)")
-
-        with col4:
-            st.markdown(f"Best ink triplets wr: ToDo")
-        st.markdown("---")
         
         # Grafici principali in colonne
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("🎨 About inks")
+            st.subheader("🎨 Total inks")
             color_stats = manager.stats_color()
             if color_stats:
                 df_colors = stats_to_df(color_stats)
@@ -228,7 +227,7 @@ if page == "🏠 Dashboard":
                 st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            st.subheader("🃏 About type")
+            st.subheader("🃏 Total types")
             if type_stats:
                 df_types = stats_to_df(type_stats)
                 fig = px.bar(df_types, x='Nome', y='Conteggio', 
@@ -260,16 +259,9 @@ if page == "🏠 Dashboard":
 
         #Galleria cubo attuale
         st.markdown("---")
-        st.subheader("⚜️ Current cube gallery")
+        st.subheader("⚜️ Cube gallery")
 
-        col_filter1, col_filter2, col_filter3 = st.columns(3)
-
-        with col_filter1:
-            cards_per_row = st.selectbox(
-                "Cards per row:",
-                [4, 6, 8],
-                index=2
-            )
+        col_filter2, col_filter3 = st.columns(2)
 
         with col_filter2:
             sort_by = st.selectbox(
@@ -287,24 +279,24 @@ if page == "🏠 Dashboard":
         cube_cards = manager.get_cube_cards()
 
     cube_cards = manager.get_cube_cards() if manager else []
-    if cube_cards:
-        # Applica filtro colore se selezionato
-        if filter_color != "All":
-            cube_cards = [card for card in cube_cards if filter_color.lower() in str(card['color']).lower()]
+    
+    # Applica filtro colore se selezionato
+    if filter_color != "All":
+        cube_cards = [card for card in cube_cards if filter_color.lower() in str(card['color']).lower()]
         
-        # Ordina le carte
-        if sort_by == "Name":
-            cube_cards.sort(key=lambda x: x['name'])
-        elif sort_by == "Cost":
-            cube_cards.sort(key=lambda x: (x['cost'] if x['cost'] is not None else 999, x['name']))
-        elif sort_by == "Color":
-            cube_cards.sort(key=lambda x: (x['color'], x['name']))
-        elif sort_by == "Type":
-            cube_cards.sort(key=lambda x: (x['type'], x['name']))
-        
-            # CSS per le card
-        st.markdown("""
-            <style>
+    # Ordina le carte
+    if sort_by == "name":
+        cube_cards.sort(key=lambda x: x['name'])
+    elif sort_by == "cost":
+        cube_cards.sort(key=lambda x: (x['cost'] if x['cost'] is not None else 999, x['name']))
+    elif sort_by == "color":
+        cube_cards.sort(key=lambda x: (x['color'], x['name']))
+    elif sort_by == "type":
+        cube_cards.sort(key=lambda x: (x['type'], x['name']))
+    
+        # CSS per le card
+    st.markdown("""
+        <style>
             .card-container {
                 position: relative;
                 border-radius: 10px;
@@ -345,231 +337,327 @@ if page == "🏠 Dashboard":
                 padding: 0 5px !important;
             }
             </style>
-        """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
         
-        # Crea la griglia
-        cols = st.columns(cards_per_row, gap="small")
-        
-        for idx, card in enumerate(cube_cards):
-            col_idx = idx % cards_per_row
-            
-            with cols[col_idx]:
-                Image = card['Image'] if card['Image'] else f"https://via.placeholder.com/300x420?text={card['name']}"
-                
-                # Mostra la carta
-                st.markdown(f"""
-                    <div class="card-container">
-                        <img src="{Image}" class="card-img" alt="{card['name']}">
-                        <div class="card-name">{card['name']}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-
-    else:
-        st.warning("No cards in cube yet!")
-
-# ============================================================================
-# PAGINA: CERCA CARTE
-# ============================================================================
-elif page == "🔍 Search cards":
-    st.header("🔍 by name")
+    # Crea la griglia
+    cols = st.columns(cards_per_row, gap="small")
     
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        search_query = st.text_input("Search",
-            placeholder="Es: Elsa, Mickey, Maleficent...",
-            label_visibility="collapsed",)
-    
-    with col2:
-        in_cube_only = st.checkbox("Only cards actually in cube", value=False)
-    
-    if search_query:
-        results = manager.search_cards(search_query, in_cube=in_cube_only)
+    for idx, card in enumerate(cube_cards):
+        col_idx = idx % cards_per_row
         
-        if results:
-            st.success(f"✅ Found {len(results)} cards")
+        with cols[col_idx]:
+            Image = card['Image'] if card['Image'] else f"https://via.placeholder.com/300x420?text={card['name']}"
             
-            # Converti in DataFrame per visualizzazione
-            columns = ['id', 'name', 'type', 'color', 'cost', 'inkable', 'strength', 
-                      'willpower', 'lore', 'rarity', 'in_cube']
-            
-            df = pd.DataFrame(results, columns=range(len(results[0])))
-            
-            # Seleziona solo le colonne che ci interessano (adatta gli indici)
-            display_df = pd.DataFrame({
-                'ID': df[0],
-                'Name': df[1],
-                'Type': df[6],
-                'Ink': df[7],
-                'Classification': df[16],
-                'Keyword(s)': df[19],
-                'Cost': df[8],
-                'Inkable': df[9].apply(lambda x: '✅' if x == 1 else '❌'),
-                'Strength': df[10],
-                'Willpower': df[11],
-                'Lore': df[12],
-                'In cube?': df[26].apply(lambda x: '✅' if x == 1 else '❌')
-            })
-            
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
-            
-            # Download CSV
-            csv = display_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "📥 Scarica risultati (CSV)",
-                csv,
-                "ricerca_carte.csv",
-                "text/csv"
-            )
-        else:
-            st.warning("❌ No cards found")
-
-    if cube_count == 0:
-        st.warning("⚠️ Cube is empty!")
-    else:
-        st.subheader("🔍 by card effect")
-
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            search_text = st.text_input("Search",
-            placeholder="Es: Deal 1 damage, Draw 1 card, etc...",
-            label_visibility="collapsed",
-            key = "search_effect")
-        
-        with col2:
-            in_cube_only_effect = st.checkbox("Only cards actually in cube", value=False, key='in_cube_effect')
-
-        if search_text:
-            results = manager.search_by_effect(search_text, in_cube=in_cube_only_effect)
-            
-            if results:
-                st.success(f"✅ Found {len(results)} cards")
-                
-                #Converti in DataFrame per visualizzazione
-                df = pd.DataFrame(results, columns=range(len(results[0])))
-            
-                # Seleziona solo le colonne che ci interessano
-                display_df = pd.DataFrame({
-                    'ID': df[0],
-                    'Name': df[1],
-                    'Type': df[6],
-                    'Ink': df[7],
-                    'Cost': df[8],
-                    'Effect': df[17].apply(lambda x: x[:100] + '...' if x and len(str(x)) > 100 else x),  # Tronca testo lungo
-                    'In cube?': df[26].apply(lambda x: '✅' if x == 1 else '❌')
-                })
-                
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
-                
-                # Download CSV
-                csv = display_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    "📥 Scarica risultati effetti (CSV)",
-                    csv,
-                    "ricerca_effetti.csv",
-                    "text/csv",
-                    key="download_effects"
-                )
-
-            else:
-                st.warning("❌ No cards found")
-        st.markdown("---")
-        
-        
+            # Mostra la carta
+            st.markdown(f"""
+                <div class="card-container">
+                    <img src="{Image}" class="card-img" alt="{card['name']}">
+                    <div class="card-name">{card['name']}</div>
+                </div>
+            """, unsafe_allow_html=True)
 # ============================================================================
 # PAGINA: GESTIONE CUBO
 # ============================================================================
-elif page == "➕ Cube management":
-    st.header("➕ Cube management")
-    
-    tab1, tab2 = st.tabs(["➕ Add cards", "➖ Remove cards"])
-    
-    with tab1:
-        st.subheader("Add cards to cube")
-        
-        search_add = st.text_input("Search", 
-                                    placeholder="Es: Elsa, Mickey, Maleficent...",
-                                    label_visibility="collapsed",
-                                    key="add_search")
-        
-        if search_add:
-            results = manager.search_cards(search_add, in_cube=False)
-            
-            if results:
-                for idx, card in enumerate(results):
-                    # Alterna i colori: grigio chiaro e bianco
-                    bg_color = "#CBCBCB"
-                    
-                    # Wrapper esterno per la riga
-                    with st.container():
-                        st.markdown(
-                            f"""
-                            <div style="
-                                background-color: {bg_color};
-                                padding: 1px 1px;
-                                border-radius: 3px;
-                                margin-bottom: 1px;
-                                border: 0px solid #e0e0e0;
-                            ">
-                            """,
-                            unsafe_allow_html=True
-                        )
-                        
-                        col1, col2, col3 = st.columns([3, 1, 1])
-                        with col1:
-                            st.markdown(f"**{card[1]}** - {card[6]} | {card[7]} | Costo: {card[8]}")
-                        with col2:
-                            if card[26] == 1:
-                                st.markdown("<div style='text-align:center; color:green;'>✅ In cube</div>", unsafe_allow_html=True)
-                            else:
-                                st.markdown("<div style='text-align:center; color:#888;'>⚪ Not in cube</div>", unsafe_allow_html=True)
-                        with col3:
-                            if card[26] == 0:
-                                if st.button("➕ Add", key=f"add_{card[0]}"):
-                                    if manager.add_cube(card[0]):
-                                        st.success(f"✅ {card[1]} Added!")
-                                        st.rerun()
-                                    else:
-                                        st.error("❌ Error")
 
-                        st.markdown("</div>", unsafe_allow_html=True)
-                
-    with tab2:
-        st.subheader("Remove cards from cube")
-        
-        search_remove = st.text_input("🔎 Cerca carta da rimuovere:", 
-            key="remove_search")
-        
-        if search_remove:
-            results = manager.search_cards(search_remove, in_cube=True)
+
+
+
+
+
+
+
+
+elif page == "➕ Cube management":
+    st.header("Add or remove cards from your cube")
+    
+    # =======================
+    # FILTRI (sempre visibili in alto)
+    # =======================
+    with st.container():
+        st.subheader("🔎 Filter cards")
+
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 1.5])
+        with col1:
+            filter_name = st.text_input("Search by name, effect or keyword...", 
+                                       value="", 
+                                       key="filter_name_input",
+                                       placeholder="Search by name, type or effect",
+                                       label_visibility="collapsed")
+        with col2:
+            all_colors = ["Amber", "Amethyst", "Emerald", "Ruby", "Sapphire", "Steel"]
+            selected_colors = st.multiselect("Choose 1 or more ink(s)", 
+                                            all_colors, 
+                                            key="filter_colors",
+                                            placeholder="Select inks...",
+                                            label_visibility="collapsed")
+        with col3:
+            all_types = ["Character", "Action", "Item", "Location"]
+            selected_types = st.multiselect("Choose 1 or more type(s)", 
+                                           all_types, 
+                                           key="filter_types",
+                                           placeholder="Select types...",
+                                           label_visibility="collapsed")
+        with col4:
+            cube_filter = st.selectbox("Cube status",
+                                      ["All cards", "In cube only", "Not in cube"],
+                                      key="cube_filter",
+                                      label_visibility="collapsed")
+
+    # =======================
+    # ✅ CARICA SOLO SE NECESSARIO (con cache)
+    # =======================
+    @st.cache_data(ttl=10)  # Cache per 10 secondi
+    def load_filtered_cards(name_filter, color_filter, type_filter, cube_status):
+        """Carica e filtra le carte - con cache per velocizzare"""
+        all_rows = manager.search_cards("")
+        all_cards = []
+
+        for r in all_rows:
+            row = dict(r)
             
-            if results:
-                for card in results:
-                    col1, col2 = st.columns([4, 1])
+            in_cube_value = row.get("in_cube")
+            # Converti None a 0, altrimenti usa il valore
+            in_cube_normalized = 1 if in_cube_value == 1 else 0
+            
+            all_cards.append({
+                "unique_id": row.get("unique_id") or "",
+                "name": row.get("name") or "",
+                "image": row.get("Image") or "",
+                "color": row.get("color") or "",
+                "type": row.get("type") or "",
+                "cost": row.get("cost") or "",
+                "in_cube": in_cube_normalized,
+                "body_text": str(row.get("body_text") or ""),
+                "classifications": str(row.get("classifications") or ""),
+            })
+
+        # Applica filtri
+        filtered = all_cards
+
+        # Filtro per stato cubo
+        if cube_status == "In cube only":
+            filtered = [c for c in filtered if c['in_cube'] == 1]
+        elif cube_status == "Not in cube":
+            filtered = [c for c in filtered if c['in_cube'] == 0]
+        # Se "All cards", non filtra nulla
+
+        # Filtro per nome, effetto o classificazione
+        if name_filter and name_filter.strip():
+            term = name_filter.lower()
+            
+            def matches_search(card):
+                name_match = term in (card.get('name') or "").lower()
+                effect_match = term in (card.get('body_text') or "").lower()
+                class_match = term in (card.get('classifications') or "").lower()
+                return name_match or effect_match or class_match
+            
+            filtered = [c for c in filtered if matches_search(c)]
+
+        if color_filter:
+            sel = [s.lower() for s in color_filter]
+
+            def card_has_color(card):
+                raw = card.get('color') or ""
+                parts = [p.strip().lower() for p in re.split(r'[,/]', raw) if p.strip()]
+                return any(s in parts for s in sel)
+
+            filtered = [c for c in filtered if card_has_color(c)]
+
+        if type_filter:
+            sel_types = [t.lower() for t in type_filter]
+            filtered = [c for c in filtered if (c.get('type') or "").lower() in sel_types]
+
+        return filtered
+
+    # Carica carte filtrate
+    filtered_cards = load_filtered_cards(filter_name, tuple(selected_colors), tuple(selected_types), cube_filter)
+    
+    total_cards = len(filtered_cards)
+    
+    st.markdown("---")
+    st.write(f"**Found {total_cards} cards**")
+
+    # =======================
+    # PAGINAZIONE (48 carte fisse per pagina)
+    # =======================
+    if total_cards == 0:
+        st.warning("No cards found with these filters")
+    else:
+        cards_per_page = 48  # Fisso a 48 carte per pagina
+        
+        # Inizializza pagina corrente in session_state
+        if 'current_page' not in st.session_state:
+            st.session_state.current_page = 0
+
+        total_pages = (total_cards - 1) // cards_per_page + 1
+        
+        # Controlli paginazione
+        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+        
+        with col1:
+            if st.button("⏮️ First", disabled=(st.session_state.current_page == 0)):
+                st.session_state.current_page = 0
+                st.rerun()
+        
+        with col2:
+            if st.button("◀️ Prev", disabled=(st.session_state.current_page == 0)):
+                st.session_state.current_page -= 1
+                st.rerun()
+        
+        with col3:
+            st.markdown(f"<h4 style='text-align: center;'>Page {st.session_state.current_page + 1} / {total_pages}</h4>", 
+                       unsafe_allow_html=True)
+        
+        with col4:
+            if st.button("Next ▶️", disabled=(st.session_state.current_page >= total_pages - 1)):
+                st.session_state.current_page += 1
+                st.rerun()
+        
+        with col5:
+            if st.button("Last ⏭️", disabled=(st.session_state.current_page >= total_pages - 1)):
+                st.session_state.current_page = total_pages - 1
+                st.rerun()
+
+        # =======================
+        # MOSTRA SOLO LA PAGINA CORRENTE
+        # =======================
+        start_idx = st.session_state.current_page * cards_per_page
+        end_idx = min(start_idx + cards_per_page, total_cards)
+        current_page_cards = filtered_cards[start_idx:end_idx]
+
+        # CSS personalizzato
+        st.markdown("""
+            <style>
+            .card-image {
+                width: 100%;
+                border-radius: 8px;
+                transition: transform 0.2s;
+                display: block;
+                position: relative;
+            }
+            .card-image:hover {
+                transform: scale(1.05);
+            }
+            div[data-testid="column"] {
+                padding: 2px !important;
+            }
+            /* Nascondi il margine dell'elemento markdown */
+            div[data-testid="stMarkdownContainer"] {
+                margin-bottom: 0 !important;
+            }
+            /* Stile per il bottone "In Cube" (verde e disabilitato) */
+            button[kind="primary"]:disabled {
+                background-color: #228B22 !important;
+                color: white !important;
+                opacity: 1 !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        # Griglia - solo carte della pagina corrente
+        cards_per_row = 8
+        
+        for i in range(0, len(current_page_cards), cards_per_row):
+            cols = st.columns(cards_per_row, gap="small")
+            
+            for idx, card in enumerate(current_page_cards[i:i+cards_per_row]):
+                with cols[idx]:
+                    img = card['image'] or f"https://via.placeholder.com/300x420?text={card['name']}"
+                    in_cube = card['in_cube'] == 1
                     
-                    with col1:
-                        st.write(f"**{card[1]}** - {card[6]} | {card[7]} | Costo: {card[8]}")
+                    # Mostra solo l'immagine
+                    st.markdown(f'<img src="{img}" class="card-image" alt="{card["name"]}">', 
+                               unsafe_allow_html=True)
                     
-                    with col2:
-                        if st.button("➖ Remove", key=f"remove_{card[0]}"):
-                            if manager.remove_cube(card[0]):
-                                st.success(f"✅ {card[1]} Done!")
+                    # Bottoni Add/Remove
+                    col_btn1, col_btn2 = st.columns(2)
+                    
+                    with col_btn1:
+                        # Usa un bottone disabilitato invece di success
+                        if in_cube:
+                            st.button("✓", key=f"incube_{card['unique_id']}", 
+                                     disabled=True, use_container_width=True, 
+                                     type="primary")
+                        else:
+                            if st.button("➕", key=f"add_{card['unique_id']}", use_container_width=True):
+                                if manager.add_cube(card['unique_id']):
+                                    st.cache_data.clear()
+                                    st.rerun()
+                    
+                    with col_btn2:
+                        if st.button("➖", key=f"rem_{card['unique_id']}", use_container_width=True):
+                            if manager.remove_cube(card['unique_id']):
+                                st.cache_data.clear()
                                 st.rerun()
-                            else:
-                                st.error("❌ Error")
-            else:
-                st.info("No cards found in cube")
+        
+        # Ripeti controlli paginazione in basso
+        st.markdown("---")
+        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+        
+        with col1:
+            if st.button("⏮️", key="first_bottom", disabled=(st.session_state.current_page == 0)):
+                st.session_state.current_page = 0
+                st.rerun()
+        
+        with col2:
+            if st.button("◀️", key="prev_bottom", disabled=(st.session_state.current_page == 0)):
+                st.session_state.current_page -= 1
+                st.rerun()
+        
+        with col3:
+            # Input diretto della pagina
+            page_input = st.number_input("Go to page:", min_value=1, max_value=total_pages, 
+                                        value=st.session_state.current_page + 1, 
+                                        key="page_input")
+            if page_input - 1 != st.session_state.current_page:
+                st.session_state.current_page = page_input - 1
+                st.rerun()
+        
+        with col4:
+            if st.button("▶️", key="next_bottom", disabled=(st.session_state.current_page >= total_pages - 1)):
+                st.session_state.current_page += 1
+                st.rerun()
+        
+        with col5:
+            if st.button("⏭️", key="last_bottom", disabled=(st.session_state.current_page >= total_pages - 1)):
+                st.session_state.current_page = total_pages - 1
+                st.rerun()
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ============================================================================
 # PAGINA: STATISTICHE
 # ============================================================================
-elif page == "📊 Report":
-    st.header("📊 Cube statistics")
+
+
+
+
+
+
+
+
+
+
+
+
+elif page == "📊 Other stats":
+    st.header("📊 Choose one statistic")
     
     if cube_count == 0:
         st.warning("⚠️ Cube is empty!")
     else:
         stat_choice = st.selectbox(
-            "Choose 1 statistics to analyze:",
+            "Choose one statistic to analyze:",
             ["🎨 Inks", "🃏 Type", "💎 Cost", "🖋️ Inkable", 
              "⚔️ Strength", "🛡️ Willpower", "📜 Lore", "🏷️ Classification", "🔑 Keywords"]
         )
@@ -578,6 +666,8 @@ elif page == "📊 Report":
             stats = manager.stats_color()
             if stats:
                 df = stats_to_df(stats)
+                # Rinomina colonne
+                df = df.rename(columns={'Nome': 'Ink', 'Conteggio': 'Cards', 'Percentuale': '%'})
 
                 lorcana_colors = {
                     'Amber': '#f0b101',
@@ -595,124 +685,659 @@ elif page == "📊 Report":
                         return 'Multicolor'
                     return nome_str
                 
-                df['Nome'] = df['Nome'].apply(classify_color)
-                df = df.groupby('Nome', as_index=False).sum()
+                df['Ink'] = df['Ink'].apply(classify_color)
+                df = df.groupby('Ink', as_index=False).sum()
 
-                df['Sort_Order'] = df['Nome'].apply(lambda x: 1 if x == 'Multicolor' else 0)
-                df = df.sort_values(['Sort_Order', 'Nome']).drop('Sort_Order', axis=1)
+                df['Sort_Order'] = df['Ink'].apply(lambda x: 1 if x == 'Multicolor' else 0)
+                df = df.sort_values(['Sort_Order', 'Ink']).drop('Sort_Order', axis=1)
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.dataframe(df, hide_index=True)
+                    st.dataframe(df, hide_index=True, use_container_width=True)
                 with col2:
-                    fig = px.bar(df, x='Nome', y='Conteggio', color='Nome',
-                                text='Percentuale', color_discrete_map=lorcana_colors,
-                                labels={'Nome': 'Ink',
-                                        'Conteggio': '#',
-                                        'Percentuale': '%'})
+                    fig = px.bar(df, x='Ink', y='Cards', color='Ink',
+                                text='%', color_discrete_map=lorcana_colors)
                     fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                    fig.update_layout(
+                        title="Ink Distribution",
+                        showlegend=False,
+                        xaxis_title="Ink Color",
+                        yaxis_title="Number of Cards"
+                    )
                     st.plotly_chart(fig, use_container_width=True)
         
         elif stat_choice == "🃏 Type":
             stats = manager.stats_type()
             if stats:
                 df = stats_to_df(stats)
+                df = df.rename(columns={'Nome': 'Card Type', 'Conteggio': 'Cards', 'Percentuale': '%'})
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.dataframe(df, hide_index=True)
+                    st.dataframe(df, hide_index=True, use_container_width=True)
                 with col2:
-                    fig = px.pie(df, values='Conteggio', names='Nome',
-                                 labels={'Nome': 'Type', 'Conteggio': '#'})
+                    fig = px.pie(df, values='Cards', names='Card Type',
+                                title="Card Type Distribution")
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
                     st.plotly_chart(fig, use_container_width=True)
         
         elif stat_choice == "💎 Cost":
             stats = manager.stats_cost()
             if stats:
                 df = stats_to_df(stats)
-                df = df.sort_values('Nome') 
+                df = df.rename(columns={'Nome': 'Mana Cost', 'Conteggio': 'Cards', 'Percentuale': '%'})
+                df = df.sort_values('Mana Cost')
                 
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(
-                    x=df['Nome'],
-                    y=df['Conteggio'],
+                    x=df['Mana Cost'],
+                    y=df['Cards'],
                     mode='lines+markers',
                     fill='tozeroy',
                     line=dict(color='royalblue', width=3),
-                    marker=dict(size=10)
+                    marker=dict(size=10),
+                    text=df['%'].apply(lambda x: f"{x:.1f}%"),
+                    textposition='top center'
                 ))
                 fig.update_layout(
-                    title="Mana curve",
-                    xaxis_title="Cost",
-                    yaxis_title="Number of cards",
+                    title="Mana Curve",
+                    xaxis_title="Mana Cost",
+                    yaxis_title="Number of Cards",
                     height=500
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                st.dataframe(df, hide_index=True)
+                st.dataframe(df, hide_index=True, use_container_width=True)
         
         elif stat_choice == "🖋️ Inkable":
             stats = manager.stats_inkable()
             if stats:
                 df = stats_to_df(stats)
                 df['Nome'] = df['Nome'].replace({'inkable_yes': 'Inkable', 'inkable_no': 'Non-Inkable'})
+                df = df.rename(columns={'Nome': 'Status', 'Conteggio': 'Cards', 'Percentuale': '%'})
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.dataframe(df, hide_index=True)
+                    st.dataframe(df, hide_index=True, use_container_width=True)
                 with col2:
-                    fig = px.pie(df, values='Conteggio', names='Nome',
+                    fig = px.pie(df, values='Cards', names='Status',
+                                title="Inkable vs Non-Inkable",
                                 color_discrete_map={'Inkable': 'lightblue', 'Non-Inkable': 'lightcoral'})
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
                     st.plotly_chart(fig, use_container_width=True)
         
         elif stat_choice == "⚔️ Strength":
             stats = manager.stats_strength()
             if stats:
                 df = stats_to_df(stats)
-                st.bar_chart(df.set_index('Nome')['Conteggio'])
-                st.dataframe(df, hide_index=True)
+                df = df.rename(columns={'Nome': 'Strength', 'Conteggio': 'Cards', 'Percentuale': '%'})
+                
+                fig = px.bar(df, x='Strength', y='Cards', 
+                            title="Strength Distribution",
+                            text='Cards',
+                            color='Cards',
+                            color_continuous_scale='Reds')
+                fig.update_traces(textposition='outside')
+                fig.update_layout(xaxis_title="Strength Value", yaxis_title="Number of Cards")
+                st.plotly_chart(fig, use_container_width=True)
+                st.dataframe(df, hide_index=True, use_container_width=True)
         
         elif stat_choice == "🛡️ Willpower":
             stats = manager.stats_willpower()
             if stats:
                 df = stats_to_df(stats)
-                st.bar_chart(df.set_index('Nome')['Conteggio'])
-                st.dataframe(df, hide_index=True)
+                df = df.rename(columns={'Nome': 'Willpower', 'Conteggio': 'Cards', 'Percentuale': '%'})
+                
+                fig = px.bar(df, x='Willpower', y='Cards',
+                            title="Willpower Distribution", 
+                            text='Cards',
+                            color='Cards',
+                            color_continuous_scale='Blues')
+                fig.update_traces(textposition='outside')
+                fig.update_layout(xaxis_title="Willpower Value", yaxis_title="Number of Cards")
+                st.plotly_chart(fig, use_container_width=True)
+                st.dataframe(df, hide_index=True, use_container_width=True)
         
         elif stat_choice == "📜 Lore":
             stats = manager.stats_lore()
             if stats:
                 df = stats_to_df(stats)
-                st.bar_chart(df.set_index('Nome')['Conteggio'])
-                st.dataframe(df, hide_index=True)
+                df = df.rename(columns={'Nome': 'Lore', 'Conteggio': 'Cards', 'Percentuale': '%'})
+                
+                fig = px.bar(df, x='Lore', y='Cards',
+                            title="Lore Distribution",
+                            text='Cards',
+                            color='Cards',
+                            color_continuous_scale='Purples')
+                fig.update_traces(textposition='outside')
+                fig.update_layout(xaxis_title="Lore Value", yaxis_title="Number of Cards")
+                st.plotly_chart(fig, use_container_width=True)
+                st.dataframe(df, hide_index=True, use_container_width=True)
         
         elif stat_choice == "🏷️ Classification":
             stats = manager.stats_classification()
             
             if stats:
                 df = stats_to_df(stats)
-                df = df.sort_values('Conteggio', ascending=False)
+                df = df.rename(columns={'Nome': 'Classification', 'Conteggio': 'Cards', 'Percentuale': '%'})
+                df = df.sort_values('Cards', ascending=False)
                 
-                fig = px.bar(df.head(15), x='Conteggio', y='Nome', 
-                            orientation='h', text='Conteggio')
+                fig = px.bar(df.head(15), x='Cards', y='Classification', 
+                            orientation='h', 
+                            title="Top 15 Classifications",
+                            text='Cards',
+                            color='Cards',
+                            color_continuous_scale='Viridis')
                 fig.update_traces(textposition='outside')
-                fig.update_layout(height=600)
+                fig.update_layout(
+                    height=600,
+                    xaxis_title="Number of Cards",
+                    yaxis_title="Classification"
+                )
                 st.plotly_chart(fig, use_container_width=True)
-                st.dataframe(df, hide_index=True)
+                st.dataframe(df, hide_index=True, use_container_width=True)
         
         elif stat_choice == "🔑 Keywords":
             stats = manager.stats_keyword()
             if stats:
                 df = stats_to_df(stats)
-                df = df.sort_values('Conteggio', ascending=False)
+                df = df.rename(columns={'Nome': 'Keyword', 'Conteggio': 'Cards', 'Percentuale': '%'})
+                df = df.sort_values('Cards', ascending=False)
                 
-                fig = px.bar(df, x='Nome', y='Conteggio', color='Conteggio',
-                            color_continuous_scale='Viridis', text='Conteggio',
-                            labels={'Nome': 'Keyword', 'Conteggio': '#'})
+                fig = px.bar(df, x='Keyword', y='Cards', 
+                            title="Keyword Distribution",
+                            text='Cards',
+                            color='Cards',
+                            color_continuous_scale='Viridis')
                 fig.update_traces(textposition='outside')
+                fig.update_layout(xaxis_title="Keyword", yaxis_title="Number of Cards")
                 st.plotly_chart(fig, use_container_width=True)
-                st.dataframe(df, hide_index=True)
+                st.dataframe(df, hide_index=True, use_container_width=True)
             else:
                 st.warning("⚠️ No keywords found in cube")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# =======================
+# PAGINA: REPORT A TOURNAMENT
+# =======================
+
+elif page == "🏆 Report a tournament":
+    st.header("🏆 Report a tournament")
+    
+    # Setup tabella tornei se non esiste
+    manager.setup_tournaments_table()
+    
+    # Form per inserire dati torneo
+    st.subheader("📝 Tournament information")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        winner_name = st.text_input("Winner name", placeholder="Es: Mario Rossi")
+        tournament_date = st.date_input("Tournament date")
+    
+    with col2:
+        all_colors = ["Amber", "Amethyst", "Emerald", "Ruby", "Sapphire", "Steel"]
+        selected_colors = st.multiselect(
+            "Ink triplet (select 1-3 colors)", 
+            all_colors, 
+            max_selections=3,
+            key="tournament_colors"
+        )
+        
+        # Mostra colori selezionati
+        if selected_colors:
+            colors_str = " / ".join(selected_colors)
+            st.info(f"🎨 Selected: **{colors_str}**")
+    
+    st.markdown("---")
+    
+    # Controlla che ci siano i dati minimi
+    if not winner_name or not selected_colors:
+        st.warning("⚠️ Please enter winner name and select at least 1 color")
+    else:
+        st.subheader(f"🃏 Build {winner_name}'s deck")
+        
+        # Inizializza session state per il mazzo
+        if 'tournament_deck' not in st.session_state:
+            st.session_state.tournament_deck = []
+        
+        # Mostra conteggio carte nel mazzo
+        deck_count = len(st.session_state.tournament_deck)
+        
+        col_info1, col_info2, col_info3 = st.columns(3)
+        with col_info1:
+            st.metric("📦 Cards in deck", deck_count)
+        with col_info2:
+            if deck_count >= 40:
+                st.success("✅ Deck complete (40+)")
+            else:
+                st.warning(f"⚠️ Need {40 - deck_count} more cards")
+        with col_info3:
+            if st.button("🗑️ Clear deck", type="secondary"):
+                st.session_state.tournament_deck = []
+                st.rerun()
+        
+        # Carica carte del cubo con i colori selezionati
+        @st.cache_data(ttl=10)
+        def load_cube_cards_filtered(colors_tuple):
+            """Carica carte del cubo filtrate per colori"""
+            all_rows = manager.search_cards("", in_cube=True)
+            filtered_cards = []
+            
+            colors_lower = [c.lower() for c in colors_tuple]
+            
+            for r in all_rows:
+                row = dict(r)
+                card_colors = str(row.get("color") or "").lower()
+                
+                # Controlla se la carta ha SOLO i colori selezionati
+                card_color_list = [c.strip() for c in card_colors.replace('/', ',').split(',')]
+                
+                # La carta deve avere solo colori della tripla selezionata
+                if all(cc in colors_lower for cc in card_color_list if cc):
+                    filtered_cards.append({
+                        "unique_id": row.get("unique_id") or "",
+                        "name": row.get("name") or "",
+                        "image": row.get("Image") or "",
+                        "color": row.get("color") or "",
+                        "type": row.get("type") or "",
+                        "cost": row.get("cost") or "",
+                    })
+            
+            return filtered_cards
+        
+        available_cards = load_cube_cards_filtered(tuple(selected_colors))
+        
+        st.write(f"**Available cards: {len(available_cards)}**")
+        
+        # Paginazione
+        cards_per_page = 48
+        
+        if 'tournament_page' not in st.session_state:
+            st.session_state.tournament_page = 0
+        
+        total_pages = (len(available_cards) - 1) // cards_per_page + 1 if available_cards else 0
+        
+        if total_pages > 0:
+            # Controlli paginazione
+            col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+            
+            with col1:
+                if st.button("⏮️", key="first_t", disabled=(st.session_state.tournament_page == 0)):
+                    st.session_state.tournament_page = 0
+                    st.rerun()
+            
+            with col2:
+                if st.button("◀️", key="prev_t", disabled=(st.session_state.tournament_page == 0)):
+                    st.session_state.tournament_page -= 1
+                    st.rerun()
+            
+            with col3:
+                st.markdown(f"<h4 style='text-align: center;'>Page {st.session_state.tournament_page + 1} / {total_pages}</h4>", 
+                           unsafe_allow_html=True)
+            
+            with col4:
+                if st.button("▶️", key="next_t", disabled=(st.session_state.tournament_page >= total_pages - 1)):
+                    st.session_state.tournament_page += 1
+                    st.rerun()
+            
+            with col5:
+                if st.button("⏭️", key="last_t", disabled=(st.session_state.tournament_page >= total_pages - 1)):
+                    st.session_state.tournament_page = total_pages - 1
+                    st.rerun()
+            
+            # Mostra carte della pagina corrente
+            start_idx = st.session_state.tournament_page * cards_per_page
+            end_idx = min(start_idx + cards_per_page, len(available_cards))
+            current_cards = available_cards[start_idx:end_idx]
+            
+            # CSS
+            st.markdown("""
+                <style>
+                .card-image {
+                    width: 100%;
+                    border-radius: 8px;
+                    transition: transform 0.2s;
+                    display: block;
+                }
+                .card-image:hover {
+                    transform: scale(1.05);
+                }
+                </style>
+            """, unsafe_allow_html=True)
+            
+            # Griglia carte
+            cards_per_row = 8
+            
+            for i in range(0, len(current_cards), cards_per_row):
+                cols = st.columns(cards_per_row, gap="small")
+                
+                for idx, card in enumerate(current_cards[i:i+cards_per_row]):
+                    with cols[idx]:
+                        img = card['image'] or f"https://via.placeholder.com/300x420?text={card['name']}"
+                        
+                        st.markdown(f'<img src="{img}" class="card-image" alt="{card["name"]}">', 
+                                   unsafe_allow_html=True)
+                        
+                        # Controlla se già nel mazzo
+                        in_deck = card['unique_id'] in st.session_state.tournament_deck
+                        
+                        if in_deck:
+                            # Mostra quante copie
+                            count = st.session_state.tournament_deck.count(card['unique_id'])
+                            if st.button(f"✓ ({count})", key=f"td_{card['unique_id']}_{idx}", 
+                                       disabled=True, type="primary", use_container_width=True):
+                                pass
+                        else:
+                            if st.button("➕", key=f"tadd_{card['unique_id']}_{idx}", use_container_width=True):
+                                st.session_state.tournament_deck.append(card['unique_id'])
+                                st.rerun()
+        
+        # Bottone salva torneo
+        st.markdown("---")
+        
+        if deck_count >= 40:
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                if st.button("💾 Save Tournament", type="primary", use_container_width=True):
+                    colors_str = "/".join(selected_colors)
+                    success = manager.add_tournament(
+                        winner_name, 
+                        colors_str, 
+                        tournament_date.isoformat(),
+                        st.session_state.tournament_deck
+                    )
+                    
+                    if success:
+                        st.success(f"🎉 Tournament saved! Winner: {winner_name}")
+                        st.session_state.tournament_deck = []
+                        st.session_state.tournament_page = 0
+                        st.balloons()
+                    else:
+                        st.error("❌ Error saving tournament")
+        else:
+            st.info("ℹ️ Add at least 40 cards to save the tournament")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# =======================
+# PAGINA: TOURNAMENT STATS
+# =======================
+
+elif page == "📈 Tournament stats":
+    st.header("📈 Tournament Statistics")
+    
+    # Verifica se ci sono tornei
+    all_tournaments = manager.get_all_tournaments()
+    
+    if not all_tournaments:
+        st.warning("⚠️ No tournaments registered yet!")
+        st.info("Go to 🏆 Report a tournament to add your first tournament")
+    else:
+        st.success(f"📊 Total tournaments: **{len(all_tournaments)}**")
+        
+        # Tabs per diverse statistiche
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "🃏 Top Cards", 
+            "🎨 Color Combos", 
+            "👑 Top Players",
+            "📜 Tournament History"
+        ])
+        
+        # =======================
+        # TAB 1: TOP CARDS
+        # =======================
+        with tab1:
+            st.subheader("🃏 Most winning cards")
+            
+            card_stats = manager.get_card_winrate()
+            
+            if card_stats:
+                # Converti in DataFrame
+                df_cards = pd.DataFrame(card_stats, columns=['Card Name', 'Type', 'Color', 'Wins'])
+                
+                # Top 20
+                top_20 = df_cards.head(20)
+                
+                # Grafico
+                fig = px.bar(
+                    top_20, 
+                    x='Wins', 
+                    y='Card Name',
+                    orientation='h',
+                    color='Wins',
+                    color_continuous_scale='Viridis',
+                    title="Top 20 Cards by Tournament Wins",
+                    text='Wins'
+                )
+                fig.update_traces(textposition='outside')
+                fig.update_layout(
+                    height=800,
+                    xaxis_title="Tournament Wins",
+                    yaxis_title="Card Name",
+                    yaxis={'categoryorder': 'total ascending'}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Tabella completa
+                st.markdown("### 📋 Complete list")
+                st.dataframe(df_cards, use_container_width=True, hide_index=True)
+                
+                # Download CSV
+                csv = df_cards.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    "📥 Download CSV",
+                    csv,
+                    "top_cards.csv",
+                    "text/csv"
+                )
+            else:
+                st.info("No card statistics available yet")
+        
+        # =======================
+        # TAB 2: COLOR COMBOS
+        # =======================
+        with tab2:
+            st.subheader("🎨 Most winning color combinations")
+            
+            color_stats = manager.get_color_winrate()
+            
+            if color_stats:
+                df_colors = pd.DataFrame(color_stats, columns=['Color Combo', 'Wins'])
+                
+                # Calcola percentuali
+                total_tournaments = len(all_tournaments)
+                df_colors['Win Rate %'] = (df_colors['Wins'] / total_tournaments * 100).round(2)
+                
+                # Grafico a torta
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    fig = px.pie(
+                        df_colors,
+                        values='Wins',
+                        names='Color Combo',
+                        title="Color Combo Distribution"
+                    )
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    # Grafico a barre
+                    fig = px.bar(
+                        df_colors,
+                        x='Color Combo',
+                        y='Wins',
+                        text='Wins',
+                        color='Wins',
+                        color_continuous_scale='Rainbow',
+                        title="Wins by Color Combo"
+                    )
+                    fig.update_traces(textposition='outside')
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # Tabella
+                st.dataframe(df_colors, use_container_width=True, hide_index=True)
+            else:
+                st.info("No color statistics available yet")
+        
+        # =======================
+        # TAB 3: TOP PLAYERS
+        # =======================
+        with tab3:
+            st.subheader("👑 Top players")
+            
+            winner_stats = manager.get_winner_stats()
+            
+            if winner_stats:
+                df_winners = pd.DataFrame(winner_stats, columns=['Player', 'Wins', 'Colors Used'])
+                
+                # Podio
+                st.markdown("### 🏆 Podium")
+                
+                if len(df_winners) >= 3:
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col2:
+                        st.markdown("### 🥇")
+                        st.metric("1st Place", df_winners.iloc[0]['Player'], 
+                                 f"{df_winners.iloc[0]['Wins']} wins")
+                    
+                    with col1:
+                        st.markdown("### 🥈")
+                        st.metric("2nd Place", df_winners.iloc[1]['Player'], 
+                                 f"{df_winners.iloc[1]['Wins']} wins")
+                    
+                    with col3:
+                        st.markdown("### 🥉")
+                        st.metric("3rd Place", df_winners.iloc[2]['Player'], 
+                                 f"{df_winners.iloc[2]['Wins']} wins")
+                
+                st.markdown("---")
+                
+                # Grafico
+                fig = px.bar(
+                    df_winners,
+                    x='Player',
+                    y='Wins',
+                    text='Wins',
+                    color='Wins',
+                    color_continuous_scale='Blues',
+                    title="Wins by Player"
+                )
+                fig.update_traces(textposition='outside')
+                fig.update_layout(xaxis_title="Player", yaxis_title="Tournament Wins")
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Tabella completa
+                st.dataframe(df_winners, use_container_width=True, hide_index=True)
+            else:
+                st.info("No player statistics available yet")
+        
+        # =======================
+        # TAB 4: TOURNAMENT HISTORY
+        # =======================
+        with tab4:
+            st.subheader("📜 Tournament history")
+            
+            # Mostra tutti i tornei
+            df_tournaments = pd.DataFrame(
+                all_tournaments, 
+                columns=['ID', 'Winner', 'Colors', 'Date']
+            )
+            
+            st.dataframe(df_tournaments, use_container_width=True, hide_index=True)
+            
+            # Visualizza dettaglio torneo
+            st.markdown("---")
+            st.subheader("🔍 View tournament details")
+            
+            tournament_ids = [t[0] for t in all_tournaments]
+            tournament_labels = [f"{t[1]} - {t[2]} ({t[3]})" for t in all_tournaments]
+            
+            selected_tournament = st.selectbox(
+                "Select tournament",
+                range(len(tournament_ids)),
+                format_func=lambda x: tournament_labels[x]
+            )
+            
+            if selected_tournament is not None:
+                tournament_id = tournament_ids[selected_tournament]
+                deck_cards = manager.get_tournament_deck(tournament_id)
+                
+                st.write(f"**Deck size:** {len(deck_cards)} cards")
+                
+                # Mostra il mazzo
+                deck_df = pd.DataFrame(
+                    deck_cards,
+                    columns=['ID', 'Name', 'Type', 'Color', 'Cost', 'Image']
+                )
+                
+                # Statistiche del mazzo
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    type_counts = deck_df['Type'].value_counts()
+                    st.write("**Types:**")
+                    for t, c in type_counts.items():
+                        st.write(f"- {t}: {c}")
+                
+                with col2:
+                    avg_cost = deck_df['Cost'].mean()
+                    st.metric("Average Cost", f"{avg_cost:.2f}")
+                
+                with col3:
+                    color_counts = deck_df['Color'].value_counts()
+                    st.write("**Color distribution:**")
+                    for c, count in color_counts.items():
+                        st.write(f"- {c}: {count}")
+                
+                # Tabella carte
+                st.dataframe(
+                    deck_df[['Name', 'Type', 'Color', 'Cost']], 
+                    use_container_width=True, 
+                    hide_index=True
+                )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ============================================================================
 # PAGINA: REGOLE
 # ============================================================================
@@ -746,25 +1371,24 @@ elif page == "📜 Rules":
     - View an overview of your cube including total cards, types, inks, and inkable cards.
     - Visualize statistics with pie charts and bar graphs.
 
-    #### 2. Search Cards by Name
-    - Search for specific cards by entering their name.
-    - Option to filter results to show only cards currently in your cube.
-    - Download search results as a CSV file.
-
-    #### 3. Cube Management
+    #### 2. Cube Management
     - Add cards to your cube by searching for them and clicking the "Add" button.
     - Remove cards from your cube by searching for them and clicking the "Remove" button.
 
-    #### 4. Report
+    #### 3. Report
     - Analyze various statistics of your cube such as inks, types, costs, inkable status, strength, willpower, lore, classifications, and keywords.
     - Visualize data with interactive charts.
 
 
 
-    Enjoy and happy cubing! "No no no no no no kid. Giving up is for rookies" - 🎬 Hercules
+    Enjoy and happy cubing! 
+                
+
     """)
     
     
 # Footer
 st.sidebar.markdown("---")
 st.sidebar.info("Lorcana Cube Manager v1.0\nCreated by camposssssss")
+st.markdown("---")
+st.sidebar.info("'No no no no no no kid. Giving up is for rookies - 🎬 Hercules'")
