@@ -1,27 +1,37 @@
-import requests
 import pandas as pd
 import sqlite3
 import json
+import os
 
-# step 1: Fetch data from the API
-print("\n📥 Download dati dall'API...")
-url = "https://api.lorcana-api.com/bulk/cards"
-response = requests.get(url)
-data = response.json()
-with open("card.json", "w", encoding="utf-8") as f:
-    json.dump(data, f, ensure_ascii=False, indent=2)
-print("✅ Dati scaricati e salvati in card.json")
+print("\n" + "="*70)
+print("📂 CARICAMENTO DATABASE DA JSON LOCALE")
+print("="*70)
 
-# step 2: Convert JSON data to a pandas DataFrame
+# Verifica che card.json esista
+if not os.path.exists("card.json"):
+    print("❌ Errore: card.json non trovato!")
+    print("💡 Scaricalo manualmente da: https://api.lorcana-api.com/bulk/cards")
+    print("   e salvalo come 'card.json' nella stessa cartella")
+    exit(1)
+# Carica dati dal JSON locale
+print("\n📂 Caricamento dati da card.json...")
+with open("card.json", "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+
+print(f"✅ Caricati {len(data)} carte dal JSON locale")
+
+# Converti in DataFrame
 df = pd.json_normalize(data)
-print(f"✅ Caricare dati in DataFrame con {len(df)} carte")
+print(f"✅ Dati caricati in DataFrame con {len(df)} carte")
 df.columns = df.columns.str.lower()
 
-# step 3: Connect to SQLite database (or create it if it doesn't exist)
+# Connetti al database SQLite
 print("\n📥 Connessione al database SQLite...")
 conn = sqlite3.connect('lorcana_cards.db')
 cursor = conn.cursor()
-# step 4: Create a table to store the card data
+
+# Crea tabella
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS cards (
         unique_id TEXT PRIMARY KEY,
@@ -56,8 +66,8 @@ cursor.execute('''
 conn.commit()
 print("✅ Tabella 'cards' creata o già esistente")
 
-# step 5: Insert data into the table
-print("\n📥 Inserimento dati nel database..."  )
+# Inserisci dati nel database
+print("\n📥 Inserimento dati nel database...")
 
 for _, row in df.iterrows():
     cursor.execute('''
@@ -102,12 +112,20 @@ for _, row in df.iterrows():
         0
     ))
 
-    if ((_ + 1) % 100 == 0) or _== len(df) - 1:
+    if ((_ + 1) % 100 == 0) or _ == len(df) - 1:
         print(f"  ⏳ Processate {_ + 1}/{len(df)} carte...")
 
-    conn.commit()
-    
+conn.commit()
+conn.close()
 
 print("\n" + "=" * 70)
-print("✅ DATABASE CREATO CON SUCCESSO!")
+print("✅ DATABASE CREATO CON SUCCESSO DA JSON LOCALE!")
+print("=" * 70)
+print(f"\n📊 Carte importate: {len(df)}")
+print("\n💡 Per modificare i dati:")
+print("   1. Apri 'card.json' con un editor di testo")
+print("   2. Cerca la carta (CTRL+F)")
+print("   3. Modifica i campi che vuoi")
+print("   4. Salva il file")
+print("   5. Esegui di nuovo: python main.py")
 print("=" * 70)

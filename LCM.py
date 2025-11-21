@@ -8,6 +8,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from cubeManager import CubeManager
+from datetime import datetime
 
 #conf. pagina
 st.set_page_config(page_title="Lorcana Cube Manager",
@@ -36,7 +37,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Inizializzazione sessione
-@st.cache_resource
+#@st.cache_resource
 def init_manager():
     import os
     
@@ -99,7 +100,7 @@ def stats_to_df(stats):
 st.sidebar.title("📋 Menu")
 page = st.sidebar.radio(
     "Select a section:",
-    ["🏠 Dashboard", "➕ Cube management", "📊 Other stats", "🏆 Report a tournament", "📈 Tournament stats", "📜 Rules"]
+    ["🏠 Dashboard", "➕ Cube management", "📊 Other stats", "🏆 Report a tournament", "📈 Tournament stats", "💾 Backup/Restore", "📜 Rules"]
 )
 
 # Mostra conteggio cubo sempre visibile
@@ -376,12 +377,12 @@ elif page == "➕ Cube management":
     with st.container():
         st.subheader("🔎 Filter cards")
 
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 1.5])
+        col1, col2, col3, col4, col5 = st.columns([2, 1.5, 1.5, 1.5, 1.5])
         with col1:
-            filter_name = st.text_input("Search by name, effect or keyword...", 
+            filter_name = st.text_input("Search by name, ID, effect or keyword...", 
                                        value="", 
                                        key="filter_name_input",
-                                       placeholder="Search by name, type or effect",
+                                       placeholder="Type name, effect or ID",
                                        label_visibility="collapsed")
         with col2:
             all_colors = ["Amber", "Amethyst", "Emerald", "Ruby", "Sapphire", "Steel"]
@@ -391,13 +392,18 @@ elif page == "➕ Cube management":
                                             placeholder="Select inks...",
                                             label_visibility="collapsed")
         with col3:
-            all_types = ["Character", "Action", "Item", "Location"]
+            all_types = ["Character", "Action", "Action - Song", "Item", "Location"]
             selected_types = st.multiselect("Choose 1 or more type(s)", 
                                            all_types, 
                                            key="filter_types",
                                            placeholder="Select types...",
                                            label_visibility="collapsed")
         with col4:
+            inkable_filter = st.selectbox("Inkable status",
+                                         ["All cards", "Inkable only", "Uninkable only"],
+                                         key="inkable_filter",
+                                         label_visibility="collapsed")
+        with col5:
             cube_filter = st.selectbox("Cube status",
                                       ["All cards", "In cube only", "Not in cube"],
                                       key="cube_filter",
@@ -407,7 +413,7 @@ elif page == "➕ Cube management":
     # ✅ CARICA SOLO SE NECESSARIO (con cache)
     # =======================
     @st.cache_data(ttl=10)  # Cache per 10 secondi
-    def load_filtered_cards(name_filter, color_filter, type_filter, cube_status):
+    def load_filtered_cards(name_filter, color_filter, type_filter, ink_status, cube_status):
         """Carica e filtra le carte - con cache per velocizzare"""
         all_rows = manager.search_cards("")
         all_cards = []
@@ -427,6 +433,7 @@ elif page == "➕ Cube management":
                 "type": row.get("type") or "",
                 "cost": row.get("cost") or "",
                 "in_cube": in_cube_normalized,
+                "inkable": row.get("inkable", 0),
                 "body_text": str(row.get("body_text") or ""),
                 "classifications": str(row.get("classifications") or ""),
             })
@@ -441,15 +448,23 @@ elif page == "➕ Cube management":
             filtered = [c for c in filtered if c['in_cube'] == 0]
         # Se "All cards", non filtra nulla
 
-        # Filtro per nome, effetto o classificazione
+        # Filtro inkable o no
+        if ink_status == "Inkable only":
+            filtered = [c for c in filtered if c['inkable'] == 1]
+        elif ink_status == "Uninkable only":
+            filtered = [c for c in filtered if c['inkable'] == 0]
+        # Se "All", non filtra nulla
+
+        # Filtro per nome, ID, effetto o classificazione
         if name_filter and name_filter.strip():
             term = name_filter.lower()
             
             def matches_search(card):
                 name_match = term in (card.get('name') or "").lower()
+                id_match = term in (card.get('unique_id') or "").lower()
                 effect_match = term in (card.get('body_text') or "").lower()
                 class_match = term in (card.get('classifications') or "").lower()
-                return name_match or effect_match or class_match
+                return name_match or id_match or effect_match or class_match
             
             filtered = [c for c in filtered if matches_search(c)]
 
@@ -470,7 +485,7 @@ elif page == "➕ Cube management":
         return filtered
 
     # Carica carte filtrate
-    filtered_cards = load_filtered_cards(filter_name, tuple(selected_colors), tuple(selected_types), cube_filter)
+    filtered_cards = load_filtered_cards(filter_name, tuple(selected_colors), tuple(selected_types), inkable_filter, cube_filter)
     
     total_cards = len(filtered_cards)
     
@@ -592,34 +607,25 @@ elif page == "➕ Cube management":
         
         # Ripeti controlli paginazione in basso
         st.markdown("---")
-        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+        col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
         
         with col1:
-            if st.button("⏮️", key="first_bottom", disabled=(st.session_state.current_page == 0)):
+            if st.button("⏮️ First", key="first_bottom", disabled=(st.session_state.current_page == 0)):
                 st.session_state.current_page = 0
                 st.rerun()
         
         with col2:
-            if st.button("◀️", key="prev_bottom", disabled=(st.session_state.current_page == 0)):
+            if st.button("◀️ Prev", key="prev_bottom", disabled=(st.session_state.current_page == 0)):
                 st.session_state.current_page -= 1
                 st.rerun()
         
         with col3:
-            # Input diretto della pagina
-            page_input = st.number_input("Go to page:", min_value=1, max_value=total_pages, 
-                                        value=st.session_state.current_page + 1, 
-                                        key="page_input")
-            if page_input - 1 != st.session_state.current_page:
-                st.session_state.current_page = page_input - 1
-                st.rerun()
-        
-        with col4:
-            if st.button("▶️", key="next_bottom", disabled=(st.session_state.current_page >= total_pages - 1)):
+            if st.button("▶️ Next", key="next_bottom", disabled=(st.session_state.current_page >= total_pages - 1)):
                 st.session_state.current_page += 1
                 st.rerun()
         
-        with col5:
-            if st.button("⏭️", key="last_bottom", disabled=(st.session_state.current_page >= total_pages - 1)):
+        with col4:
+            if st.button("⏭️ Last", key="last_bottom", disabled=(st.session_state.current_page >= total_pages - 1)):
                 st.session_state.current_page = total_pages - 1
                 st.rerun()
 
@@ -886,7 +892,7 @@ elif page == "🏆 Report a tournament":
     col1, col2 = st.columns(2)
     
     with col1:
-        winner_name = st.text_input("Winner name", placeholder="Es: Mario Rossi")
+        winner_name = st.text_input("Winner name", placeholder="Es: Giuseppe Trippa")
         tournament_date = st.date_input("Tournament date")
     
     with col2:
@@ -907,16 +913,55 @@ elif page == "🏆 Report a tournament":
     
     # Controlla che ci siano i dati minimi
     if not winner_name or not selected_colors:
-        st.warning("⚠️ Please enter winner name and select at least 1 color")
+        st.warning("Enter winner name and winning inks")
     else:
         st.subheader(f"🃏 Build {winner_name}'s deck")
         
         # Inizializza session state per il mazzo
         if 'tournament_deck' not in st.session_state:
             st.session_state.tournament_deck = []
+
+        #Hidden inkaster toggle
+        if 'include_hidden_inkcaster' not in st.session_state:
+            st.session_state.include_hidden_inkcaster = False
+        
+        st.markdown("#### 🎴 Did you play Hidden Inkcaster in your deck?")
+        col_toggle, col_info = st.columns([1, 3])
+
+        with col_toggle:
+            include_inkcaster = st.checkbox(
+                "Add Hidden Inkcaster",
+                value=st.session_state.include_hidden_inkcaster,
+                key="inkcaster_checkbox"
+            )
+            st.session_state.include_hidden_inkcaster = include_inkcaster
+        
+        with col_info:
+            if include_inkcaster:
+                st.success("✅ Hidden Inkcaster will be added to the deck (doesn't count toward 40 cards)")
+            else:
+                st.info("ℹ️ Hidden Inkcaster can be added to any deck regardless of ink colors")
+        
+        st.markdown("---")
+        
+        # Calcola conteggio carte (Hidden Inkcaster non conta se incluso)
+        HIDDEN_INKCASTER_ID = "URS-098"
+        
+        # Rimuovi Hidden Inkcaster dal conteggio se presente
+        deck_cards_without_inkcaster = [
+            card_id for card_id in st.session_state.tournament_deck 
+            if card_id != HIDDEN_INKCASTER_ID
+        ]
         
         # Mostra conteggio carte nel mazzo
         deck_count = len(st.session_state.tournament_deck)
+
+        # Aggiungi/Rimuovi automaticamente Hidden Inkcaster
+        if include_inkcaster and HIDDEN_INKCASTER_ID not in st.session_state.tournament_deck:
+            st.session_state.tournament_deck.insert(0, HIDDEN_INKCASTER_ID)
+        elif not include_inkcaster and HIDDEN_INKCASTER_ID in st.session_state.tournament_deck:
+            st.session_state.tournament_deck.remove(HIDDEN_INKCASTER_ID)
+        
         
         col_info1, col_info2, col_info3 = st.columns(3)
         with col_info1:
@@ -1324,6 +1369,139 @@ elif page == "📈 Tournament stats":
                     use_container_width=True, 
                     hide_index=True
                 )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+elif page == "💾 Backup/Restore":
+    st.header("💾 Backup & Restore Cube")
+    
+    cube_count = manager.get_cube_count()
+    
+    st.info(f"📦 Current cube: **{cube_count} cards**")
+    
+    # =======================
+    # EXPORT
+    # =======================
+    st.subheader("📤 Export Cube")
+    st.write("Save your current cube to a JSON file")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        export_filename = st.text_input(
+            "Backup filename",
+            value=f"cube_backup_{datetime.now().strftime('%Y%m%d')}.json"
+        )
+    
+    with col2:
+        st.write("")  # spacer
+        st.write("")
+        if st.button("📥 Export Cube", type="primary", use_container_width=True):
+            if cube_count == 0:
+                st.warning("⚠️ Cube is empty!")
+            else:
+                result = manager.export_cube_to_json(export_filename)
+                if result:
+                    st.success(f"✅ Cube exported to `{result}`")
+                    
+                    # Offri download
+                    with open(result, 'r', encoding='utf-8') as f:
+                        backup_content = f.read()
+                    
+                    st.download_button(
+                        label="⬇️ Download Backup File",
+                        data=backup_content,
+                        file_name=result,
+                        mime="application/json"
+                    )
+                else:
+                    st.error("❌ Export failed")
+    
+    # Mostra lista ID (per debug/controllo)
+    with st.expander("🔍 View card IDs in cube"):
+        card_ids = manager.get_cube_id_list()
+        st.code("\n".join(card_ids), language="text")
+        
+        # Download lista semplice
+        ids_text = "\n".join(card_ids)
+        st.download_button(
+            "📄 Download ID list (txt)",
+            ids_text,
+            f"cube_ids_{datetime.now().strftime('%Y%m%d')}.txt",
+            "text/plain"
+        )
+    
+    st.markdown("---")
+    
+    # =======================
+    # IMPORT
+    # =======================
+    st.subheader("📥 Import Cube")
+    st.write("Restore a cube from a backup file")
+    
+    uploaded_file = st.file_uploader(
+        "Choose backup file (JSON)",
+        type=['json'],
+        help="Upload a cube backup file created with Export"
+    )
+    
+    if uploaded_file:
+        # Leggi il file
+        backup_data = json.load(uploaded_file)
+        
+        st.success(f"✅ File loaded: {backup_data.get('total_cards', 0)} cards")
+        st.info(f"📅 Backup date: {backup_data.get('export_date', 'Unknown')}")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            clear_cube = st.checkbox(
+                "🗑️ Clear existing cube before import",
+                value=True,
+                help="Remove all cards from cube before importing"
+            )
+        
+        with col2:
+            st.write("")
+            st.write("")
+            if st.button("📤 Import Cube", type="primary", use_container_width=True):
+                # Salva temporaneamente il file
+                temp_filename = "temp_backup.json"
+                with open(temp_filename, 'w', encoding='utf-8') as f:
+                    json.dump(backup_data, f)
+                
+                # Importa
+                success = manager.import_cube_from_json(temp_filename, clear_existing=clear_cube)
+                
+                if success:
+                    st.success("✅ Cube imported successfully!")
+                    st.balloons()
+                    # Pulisci cache
+                    st.cache_data.clear()
+                    
+                    # Rimuovi file temporaneo
+                    import os
+                    if os.path.exists(temp_filename):
+                        os.remove(temp_filename)
+                    
+                    st.rerun()
+                else:
+                    st.error("❌ Import failed")
+    
+    st.markdown("---")
+    st.warning("⚠️ **Important**: Always keep backups of your cube!")
+
 
 
 
